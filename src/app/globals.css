@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-canvas: #f4f6f4;
+  --app-surface: #fbfcfb;
+  --app-surface-2: #eef2ef;
+  --app-sidebar: #123226;
+  --app-sidebar-hover: #1b4635;
+  --app-sidebar-text: #e9f1ec;
+  --app-text: #17211c;
+  --app-text-muted: #5f6d65;
+  --app-border: #d7ded9;
+  --app-accent: #216b45;
+  --app-accent-strong: #194f35;
+  --app-danger: #b42318;
+  --app-warning: #9a6700;
+  --app-info: #175cd3;
+  --app-shadow: 0 12px 34px rgba(20, 57, 40, 0.08);
+}
+
+[data-theme="dark"] {
+  --app-canvas: #111714;
+  --app-surface: #18201c;
+  --app-surface-2: #202a25;
+  --app-sidebar: #0b1711;
+  --app-sidebar-hover: #173126;
+  --app-sidebar-text: #e1ebe5;
+  --app-text: #ecf3ef;
+  --app-text-muted: #a4b1aa;
+  --app-border: #334039;
+  --app-accent: #4ba878;
+  --app-accent-strong: #70bd91;
+  --app-danger: #f97066;
+  --app-warning: #fdb022;
+  --app-info: #84adff;
+  --app-shadow: 0 12px 34px rgba(0, 0, 0, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--app-canvas);
+}
+
+body {
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--app-canvas);
+  color: var(--app-text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active,
+a[role="button"]:active {
+  transform: translateY(1px);
+}
+
+::selection {
+  background: rgba(49, 137, 94, 0.24);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-muted) 45%, transparent);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-surface {
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.app-panel-shadow {
+  box-shadow: var(--app-shadow);
+}
+
+.tabular {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-muted {
+  color: var(--app-text-muted);
+}
+
+.interactive-row {
+  transition: background-color 120ms ease;
+}
+
+.interactive-row:hover {
+  background: var(--app-surface-2);
+}
+
+.focus-ring:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--app-accent) 35%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    color: #17211c;
+  }
+}

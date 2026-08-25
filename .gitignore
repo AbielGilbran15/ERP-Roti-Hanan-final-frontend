@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.codex/
+out/
+coverage/
+.env
+.env.local
+.env*.local
+.insforge/project.json
+npm-debug.log*
+*.tsbuildinfo
