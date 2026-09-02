@@ -21,6 +21,7 @@ export const unitDefinitions: UnitDefinition[] = [
   { name: "Karung", family: "Kemasan", factorToBase: 1, automatic: false },
   { name: "Sak", family: "Kemasan", factorToBase: 1, automatic: false },
   { name: "Pack", family: "Kemasan", factorToBase: 1, automatic: false },
+  { name: "Box", family: "Kemasan", factorToBase: 1, automatic: false },
   { name: "Dus", family: "Kemasan", factorToBase: 1, automatic: false },
   { name: "Karton", family: "Kemasan", factorToBase: 1, automatic: false },
   { name: "Botol", family: "Kemasan", factorToBase: 1, automatic: false },
@@ -32,7 +33,7 @@ export const unitGroups: Array<{ label: UnitFamily; units: string[] }> = [
   { label: "Berat", units: ["Ton", "Kg", "Gram", "Mg"] },
   { label: "Volume", units: ["Liter", "Ml"] },
   { label: "Jumlah", units: ["Pcs", "Lusin", "Kodi", "Gross"] },
-  { label: "Kemasan", units: ["Karung", "Sak", "Pack", "Dus", "Karton", "Botol", "Kaleng", "Roll"] },
+  { label: "Kemasan", units: ["Karung", "Sak", "Pack", "Box", "Dus", "Karton", "Botol", "Kaleng", "Roll"] },
 ];
 
 export const getUnitDefinition = (unit: string) =>

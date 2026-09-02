@@ -15,7 +15,7 @@ export function PageHeader({
         <h1 className="text-2xl font-semibold tracking-[-0.025em] text-[var(--app-text)] md:text-[28px]">{title}</h1>
         {description ? <p className="mt-1.5 max-w-3xl text-sm leading-6 text-[var(--app-text-muted)]">{description}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2 no-print">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 no-print">{actions}</div> : null}
     </div>
   );
 }

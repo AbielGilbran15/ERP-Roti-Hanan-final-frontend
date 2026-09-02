@@ -42,7 +42,7 @@ export function DataTable<T>({
   });
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="flex flex-col gap-3 border-b border-[var(--app-border)] p-3 sm:flex-row sm:items-center sm:justify-between">
         <Input
           value={globalFilter}
@@ -61,7 +61,7 @@ export function DataTable<T>({
           description={globalFilter.trim() ? `Tidak ada data yang cocok dengan “${globalFilter.trim()}”. Coba kata kunci lain.` : emptyDescription}
         />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="min-w-0 overflow-x-auto overscroll-x-contain">
           <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (

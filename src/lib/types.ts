@@ -3,7 +3,6 @@ export type Role =
   | "Admin Penjualan/Sales"
   | "Staff Gudang"
   | "Staff Produksi"
-  | "QC Inspector"
   | "Staff Purchasing"
   | "Admin HR/Finance";
 
@@ -58,15 +57,70 @@ export type Supplier = {
   isActive: boolean;
 };
 
-export type MaterialType = "Bahan Baku" | "Kemasan";
+export type SupplierQuotationDraft = {
+  referenceNumber: string;
+  supplierId: string;
+  productId: string;
+  unitPrice: number;
+  minimumOrderQuantity: number;
+  leadTimeDays: number;
+  quotedAt: string;
+  validUntil?: string;
+  notes: string;
+};
+
+export type SupplierQuotation = SupplierQuotationDraft & {
+  id: string;
+  supplierNameSnapshot: string;
+  productNameSnapshot: string;
+  purchaseUnitSnapshot: string;
+  paymentTermsDaysSnapshot: number;
+  createdBy: string;
+  createdAt: string;
+  updatedBy?: string;
+  updatedAt?: string;
+};
+
+export type MaterialType = "Bahan Baku" | "Bahan Baku Toping" | "Kemasan";
 export type ProductType = MaterialType | "Produk Jadi";
+
+export type FinishedProductCategory = {
+  id: string;
+  code: string;
+  name: string;
+  requiresType: boolean;
+  requiresVariant: boolean;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type FinishedProductTypeDefinition = {
+  id: string;
+  categoryId: string;
+  code: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type FinishedProductVariant = {
+  id: string;
+  typeId: string;
+  code: string;
+  name: string;
+  description: string;
+  sortOrder: number;
+  isActive: boolean;
+};
 
 export type Product = {
   id: string;
   code: string;
   name: string;
   type: ProductType;
-  productType?: string;
+  finishedProductCategoryId?: string;
+  finishedProductTypeId?: string;
+  finishedProductVariantId?: string;
   purchaseUnit?: string;
   purchaseContentValue?: number;
   purchaseContentUnit?: string;
@@ -75,19 +129,29 @@ export type Product = {
   conversionValue: number;
   purchasePrice: number;
   salesUnit?: string;
+  contentQuantity?: number;
+  contentUnit?: string;
+  packagingDescription?: string;
   weightValue?: number;
   weightUnit?: string;
   agent1Price: number;
   agent2Price: number;
   cost: number;
   shelfLifeDays: number;
+  /** Nilai input stok minimum dalam satuan isi. */
+  minStockInputValue?: number;
+  minStockInputUnit?: string;
+  /** Nilai stok minimum yang sudah dikonversi dan disimpan dalam satuan stok. */
   minStock: number;
-  requiresQc: boolean;
   notes: string;
   isActive: boolean;
 };
 
-export type StockStatus = "Tersedia" | "Karantina" | "Ditahan" | "Ditolak" | "Dalam Pengiriman";
+export type StockStatus =
+  | "Tersedia"
+  | "Staging Produksi"
+  | "Rusak"
+  | "Dalam Pengiriman";
 
 export type StockItem = {
   id: string;
@@ -101,6 +165,35 @@ export type StockItem = {
   referenceId?: string;
 };
 
+export type StockMovementType =
+  | "Penerimaan"
+  | "Reservasi"
+  | "Pelepasan Reservasi"
+  | "Pengeluaran Produksi"
+  | "Konsumsi Produksi"
+  | "Output Produksi"
+  | "Waste Produksi"
+  | "Penjualan"
+  | "Pengiriman"
+  | "Kerusakan Pengiriman"
+  | "Retur Penjualan"
+  | "Koreksi Stok";
+
+export type StockMovement = {
+  id: string;
+  type: StockMovementType;
+  productId: string;
+  lot: string;
+  quantity: number;
+  unit: string;
+  fromWarehouse?: string;
+  toWarehouse?: string;
+  reference: string;
+  actorId: string;
+  createdAt: string;
+  notes?: string;
+};
+
 export type CartLine = {
   productId: string;
   quantity: number;
@@ -110,15 +203,29 @@ export type SaleLine = CartLine & {
   unitPrice: number;
 };
 
+export type SaleStockAllocation = {
+  id: string;
+  productId: string;
+  stockId: string;
+  lot: string;
+  quantity: number;
+  productionOrderId?: string;
+  allocatedAt: string;
+};
+
 export type PaymentMethod = "Tunai" | "QRIS" | "Transfer" | "Cicilan" | "Kredit/Tempo";
 export type OrderSource = "POS" | "WhatsApp" | "Telepon" | "Datang Langsung";
 export type FulfillmentMethod = "Diambil" | "Dikirim";
+export type DeliveryStatus = "Belum Disiapkan" | "Siap Dikirim" | "Dikirim" | "Diterima" | "Bermasalah";
+export type DeliveryIssueType = "Selisih" | "Rusak" | "Retur";
+export type DeliveryResolution = "Diterima dengan Catatan" | "Kirim Pengganti" | "Retur";
 export type SaleStatus =
   | "Menunggu Produksi"
   | "Siap Dipenuhi"
   | "Dalam Pengiriman"
   | "Selesai"
   | "Bermasalah"
+  | "Retur Sebagian"
   | "Diretur";
 
 export type DeliveryAttachment = {
@@ -140,6 +247,8 @@ export type Sale = {
   createdAt: string;
   neededAt?: string;
   items: SaleLine[];
+  /** Reservasi stok per lot untuk pesanan ini. */
+  stockAllocations?: SaleStockAllocation[];
   subtotal: number;
   discount: number;
   total: number;
@@ -148,6 +257,7 @@ export type Sale = {
   orderSource: OrderSource;
   fulfillmentMethod: FulfillmentMethod;
   status: SaleStatus;
+  deliveryStatus?: DeliveryStatus;
   paymentTermsDaysSnapshot?: number;
   creditLimitSnapshot?: number;
   dueDate?: string;
@@ -156,6 +266,41 @@ export type Sale = {
   deliveryProof?: string;
   deliveryAttachments?: DeliveryAttachment[];
   deliveryIssue?: string;
+  deliveryIssueType?: DeliveryIssueType;
+  deliveryResolution?: DeliveryResolution;
+  deliveryResolutionNote?: string;
+  deliveryResolvedBy?: string;
+  deliveryResolvedAt?: string;
+  salesReturnId?: string;
+};
+
+export type SalesReturnCondition = "Layak Jual" | "Rusak";
+export type SalesReturnStatus = "Menunggu Refund" | "Selesai";
+
+export type SalesReturn = {
+  id: string;
+  number: string;
+  saleId: string;
+  saleNumber: string;
+  customerId: string;
+  createdBy: string;
+  createdAt: string;
+  reason: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+    condition: SalesReturnCondition;
+    stockItemId: string;
+  }>;
+  returnValue: number;
+  refundAmount: number;
+  status: SalesReturnStatus;
+  receivedAt: string;
+  refundAccountId?: string;
+  refundTransactionId?: string;
+  refundedBy?: string;
+  refundedAt?: string;
 };
 
 export type SalesShift = {
@@ -169,16 +314,65 @@ export type SalesShift = {
   status: "Buka" | "Ditutup";
 };
 
-export type ProductionStatus = "Dijadwalkan" | "Berjalan" | "Menunggu QC" | "Selesai" | "Ditahan";
+export type ProductionMaterialAllocation = {
+  id: string;
+  stockId: string;
+  lot: string;
+  warehouse: string;
+  /** Jumlah yang disiapkan Gudang saat menyetujui permintaan; belum mengurangi stok. */
+  approvedQty: number;
+  issuedQty: number;
+  usedQty: number;
+};
+
+export type ProductionMaterialRequirement = {
+  id: string;
+  materialProductId: string;
+  role: MaterialType;
+  /** Jumlah yang diminta manual oleh Staff Produksi dalam satuan stok barang. */
+  requestedQty: number;
+  shortageQty: number;
+  allocations: ProductionMaterialAllocation[];
+};
+
+export type ProductionOutput = {
+  id: string;
+  productId: string;
+  goodQty: number;
+  failedQty: number;
+  failureReason?: string;
+  stockItemId?: string;
+};
+
+export type ProductionStatus =
+  | "Menunggu Gudang"
+  | "Ditunda Gudang"
+  | "Kekurangan Bahan"
+  | "Menunggu Pembelian"
+  | "Disetujui Gudang"
+  | "Bahan Dikonfirmasi"
+  | "Permintaan Kedaluwarsa"
+  | "Berjalan"
+  | "Selesai";
 
 export type ProductionOrder = {
   id: string;
   batchNumber: string;
-  productId: string;
-  recipeVersion: string;
-  targetQty: number;
-  actualQty: number;
-  wasteQty: number;
+  materials: ProductionMaterialRequirement[];
+  outputs: ProductionOutput[];
+  materialRequestNumber?: string;
+  materialRequestedAt?: string;
+  materialRequestExpiresAt?: string;
+  materialRequestDeferredUntil?: string;
+  materialRequestNote?: string;
+  warehouseConfirmedBy?: string;
+  warehouseConfirmedAt?: string;
+  materialsConfirmedBy?: string;
+  materialsConfirmedAt?: string;
+  purchaseRequestId?: string;
+  resultNotes?: string;
+  reportedBy?: string;
+  reportedAt?: string;
   scheduledAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -188,20 +382,35 @@ export type ProductionOrder = {
   priority: "Normal" | "Tinggi" | "Mendesak";
 };
 
-export type QualityInspection = {
+export type ProductionResultDraft = {
+  outputs: Array<{
+    productId: string;
+    goodQty: number;
+    failedQty: number;
+    failureReason: string;
+  }>;
+  notes: string;
+};
+
+export type MaterialPurchaseRequestStatus = "Baru" | "Diproses" | "PO Dibuat" | "Selesai" | "Ditolak";
+
+export type MaterialPurchaseRequest = {
   id: string;
   number: string;
-  type: "Bahan Masuk" | "Proses" | "Produk Jadi" | "Sanitasi";
-  reference: string;
-  itemName: string;
-  lot: string;
-  inspector: string;
-  createdAt: string;
-  status: "Menunggu" | "Lulus" | "Ditahan" | "Ditolak";
-  sampleSize?: string;
-  supplierId?: string;
-  notes?: string;
-  checks: Array<{ name: string; value: string; result: "Lulus" | "Gagal" }>;
+  productionOrderId: string;
+  productionBatchNumber: string;
+  requestedBy: string;
+  requestedAt: string;
+  neededAt: string;
+  priority: ProductionOrder["priority"];
+  reason: string;
+  status: MaterialPurchaseRequestStatus;
+  purchaseOrderId?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unit: string;
+  }>;
 };
 
 export type PurchaseOrder = {
@@ -212,6 +421,7 @@ export type PurchaseOrder = {
   createdAt: string;
   expectedAt: string;
   paymentTermsDaysSnapshot: number;
+  sourcePurchaseRequestId?: string;
   items: Array<
     CartLine & {
       purchaseUnit: string;
@@ -224,7 +434,32 @@ export type PurchaseOrder = {
     }
   >;
   total: number;
-  status: "Draft" | "Menunggu Persetujuan" | "Dipesan" | "Diterima Sebagian" | "Diterima";
+  status: "Draft" | "Dipesan" | "Diterima Sebagian" | "Diterima" | "Ditutup";
+};
+
+export type GoodsReceiptStatus = "Diterima Fisik" | "Selesai";
+
+export type GoodsReceipt = {
+  id: string;
+  number: string;
+  purchaseOrderId: string;
+  purchaseOrderNumber: string;
+  supplierId: string;
+  receivedBy: string;
+  receivedAt: string;
+  status: GoodsReceiptStatus;
+  items: Array<{
+    id: string;
+    purchaseOrderItemIndex: number;
+    productId: string;
+    receivedQty: number;
+    purchaseUnit: string;
+    stockQuantity: number;
+    stockUnit: string;
+    lot: string;
+    expiryDate?: string;
+    stockItemId: string;
+  }>;
 };
 
 export type Invoice = {
@@ -242,6 +477,45 @@ export type Invoice = {
   status: "Belum Bayar" | "Dibayar Sebagian" | "Lunas" | "Jatuh Tempo";
 };
 
+export type CashAccount = {
+  id: string;
+  name: string;
+  kind: "Kas" | "Bank";
+  balance: number;
+  updatedAt: string;
+};
+
+export type CashTransaction = {
+  id: string;
+  number: string;
+  accountId: string;
+  direction: "Masuk" | "Keluar";
+  amount: number;
+  description: string;
+  source: string;
+  date: string;
+  status?: "Aktif" | "Dibalik";
+  createdBy?: string;
+  reversedByTransactionId?: string;
+  reversesTransactionId?: string;
+  reversalReason?: string;
+};
+
+export type CostOfGoodsSold = {
+  id: string;
+  number: string;
+  date: string;
+  productId: string;
+  productNameSnapshot: string;
+  quantity: number;
+  unitCost: number;
+  description?: string;
+  amount: number;
+  source?: "Otomatis Penjualan" | "Otomatis Retur" | "Koreksi Manual";
+  saleId?: string;
+  reference?: string;
+};
+
 export type Expense = {
   id: string;
   number: string;
@@ -250,7 +524,12 @@ export type Expense = {
   payee: string;
   amount: number;
   date: string;
-  status: "Draft" | "Menunggu Persetujuan" | "Disetujui" | "Dibayar";
+  status: "Draft" | "Disetujui" | "Dibayar";
+  requestedBy?: string;
+  paidFromAccountId?: string;
+  paidAt?: string;
+  paidBy?: string;
+  paymentTransactionId?: string;
 };
 
 export type Employee = {
@@ -273,20 +552,41 @@ export type Payroll = {
   grossPay: number;
   deductions: number;
   netPay: number;
-  status: "Draft" | "Menunggu Persetujuan" | "Disetujui" | "Dibayar";
+  status: "Draft" | "Disetujui" | "Dibayar" | "Dikunci";
+  paymentTransactionId?: string;
+  paidFromAccountId?: string;
+  paidBy?: string;
+  paidAt?: string;
+  payslipNumber?: string;
+  lockedBy?: string;
+  lockedAt?: string;
 };
 
-export type Approval = {
+export type StockCountStatus = "Draft" | "Sedang Dihitung" | "Siap Diposting" | "Diposting";
+
+export type StockCountLine = {
   id: string;
-  type: "Pembelian" | "Biaya" | "Diskon" | "Koreksi Stok" | "Kredit" | "Payroll";
-  reference: string;
-  title: string;
-  requester: string;
-  context: string;
-  amount: number;
-  requestedAt: string;
-  reason: string;
-  status: "Menunggu" | "Disetujui" | "Ditolak";
+  stockId: string;
+  productId: string;
+  warehouse: string;
+  lot: string;
+  systemQty: number;
+  countedQty?: number;
+  varianceQty: number;
+  reason?: string;
+};
+
+export type StockCount = {
+  id: string;
+  number: string;
+  warehouse: string;
+  createdBy: string;
+  createdAt: string;
+  status: StockCountStatus;
+  lines: StockCountLine[];
+  submittedAt?: string;
+  postedBy?: string;
+  postedAt?: string;
 };
 
 export type AppNotification = {
@@ -299,9 +599,22 @@ export type AppNotification = {
   read: boolean;
 };
 
+export type SalesTarget = {
+  id: string;
+  effectiveFrom: string;
+  effectiveUntil: string;
+  agent1DailyTarget: number;
+  agent2DailyTarget: number;
+  notes: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+};
+
 export type AuditLog = {
   id: string;
-  entityType: "Pelanggan" | "Supplier" | "Barang/Bahan" | "Barang Jadi";
+  entityType: "Pelanggan" | "Supplier" | "Barang/Bahan" | "Barang Jadi" | "Klasifikasi Barang Jadi" | "Purchase Order" | "Biaya" | "Stok Opname" | "Target Penjualan" | "Retur Penjualan" | "Pengiriman" | "Payroll" | "Mutasi Kas" | "Produksi";
   recordId: string;
   recordLabel: string;
   action: "Dibuat" | "Diubah";

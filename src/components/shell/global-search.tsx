@@ -30,7 +30,6 @@ export function GlobalSearch() {
   const purchaseOrders = useERPStore((state) => state.purchaseOrders);
   const invoices = useERPStore((state) => state.invoices);
   const employees = useERPStore((state) => state.employees);
-  const approvals = useERPStore((state) => state.approvals);
 
   useEffect(() => {
     setValue("");
@@ -109,17 +108,8 @@ export function GlobalSearch() {
         }
       }
     }
-    if (found.length < 8 && allowed("/approvals")) {
-      for (const approval of approvals) {
-        if (found.length >= 8) break;
-        if (matches(`${approval.reference} ${approval.title} ${approval.status}`)) {
-          add({ id: approval.id, title: approval.reference, meta: `${approval.title} · ${approval.status}`, href: "/approvals" });
-        }
-      }
-    }
-
     return found;
-  }, [approvals, customerNames, deferredValue, employees, invoices, products, productionOrders, purchaseOrders, role, sales]);
+  }, [customerNames, deferredValue, employees, invoices, products, productionOrders, purchaseOrders, role, sales]);
 
   const openResult = (href: AppRoute) => {
     setValue("");

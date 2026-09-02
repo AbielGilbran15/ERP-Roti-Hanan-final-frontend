@@ -14,6 +14,7 @@
   --app-border: #d7ded9;
   --app-accent: #216b45;
   --app-accent-strong: #194f35;
+  --app-accent-soft: #e2f0e7;
   --app-danger: #b42318;
   --app-warning: #9a6700;
   --app-info: #175cd3;
@@ -32,6 +33,7 @@
   --app-border: #334039;
   --app-accent: #4ba878;
   --app-accent-strong: #70bd91;
+  --app-accent-soft: #173a29;
   --app-danger: #f97066;
   --app-warning: #fdb022;
   --app-info: #84adff;
@@ -45,11 +47,14 @@
 html {
   min-width: 320px;
   background: var(--app-canvas);
+  scroll-behavior: smooth;
 }
 
 body {
+  width: 100%;
   min-height: 100dvh;
   margin: 0;
+  overflow-x: clip;
   background: var(--app-canvas);
   color: var(--app-text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
@@ -123,6 +128,144 @@ a[role="button"]:active {
 .focus-ring:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--app-accent) 35%, transparent);
   outline-offset: 2px;
+}
+
+@media (min-width: 1280px) {
+  .owner-metric-strip {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .finance-metric-strip {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Fluent UI controls are inline-sized by default. Inside dense ERP grids that
+ * intrinsic sizing can push a column past its container. Keep every form slot
+ * shrinkable and let the surrounding grid own the available width.
+ */
+.fui-Field.fui-Field,
+.fui-Input.fui-Input,
+.fui-Select.fui-Select,
+.fui-Textarea.fui-Textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fui-Field > .fui-Input,
+.fui-Field > .fui-Select,
+.fui-Field > .fui-Textarea,
+.fui-Select.fui-Select,
+.fui-Select__select,
+.fui-Textarea,
+.fui-Textarea__textarea {
+  width: 100%;
+}
+
+.fui-Input__input,
+.fui-Select__select,
+.fui-Textarea__textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fui-Field__label.fui-Field__label,
+.fui-Field__hint.fui-Field__hint,
+.fui-Field__validationMessage.fui-Field__validationMessage,
+.fui-Checkbox__label.fui-Checkbox__label {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.fui-Input__contentBefore.fui-Input__contentBefore,
+.fui-Input__contentAfter.fui-Input__contentAfter {
+  min-width: 0;
+  max-width: 50%;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A single dialog contract prevents fields and actions from escaping the viewport. */
+.fui-DialogSurface.fui-DialogSurface {
+  width: min(calc(100vw - 1.5rem), 37.5rem);
+  max-width: none;
+  max-height: calc(100dvh - 1.5rem);
+  overflow: hidden;
+}
+
+.fui-DialogSurface.fui-DialogSurface.erp-dialog--medium {
+  width: min(calc(100vw - 1.5rem), 45rem);
+}
+
+.fui-DialogSurface.fui-DialogSurface.erp-dialog--wide {
+  width: min(calc(100vw - 1.5rem), 61.25rem);
+}
+
+.fui-DialogSurface.fui-DialogSurface.erp-dialog--xwide {
+  width: min(calc(100vw - 1.5rem), 65rem);
+}
+
+.fui-DialogBody.fui-DialogBody,
+.fui-DialogContent.fui-DialogContent,
+.fui-DialogTitle.fui-DialogTitle,
+.fui-DialogActions.fui-DialogActions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fui-DialogBody.fui-DialogBody {
+  max-height: calc(100dvh - 4.5rem);
+  overflow: hidden;
+}
+
+.fui-DialogContent.fui-DialogContent {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.fui-DialogTitle.fui-DialogTitle {
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.fui-DialogActions.fui-DialogActions {
+  flex-wrap: wrap;
+}
+
+.fui-DialogActions > .fui-Button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .fui-DialogSurface.fui-DialogSurface {
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    padding: 1rem;
+  }
+
+  .fui-DialogBody.fui-DialogBody {
+    max-height: calc(100dvh - 3rem);
+  }
+
+  .fui-DialogActions.fui-DialogActions {
+    width: 100%;
+  }
+
+  .fui-DialogActions > .fui-Button {
+    height: auto;
+    min-height: 2rem;
+    width: 100%;
+    white-space: normal;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

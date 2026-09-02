@@ -34,29 +34,44 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionPanel } from "@/components/ui/section-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useAppToast } from "@/components/ui/app-toast";
+import { SupplierComparison } from "@/components/purchasing/supplier-comparison";
 import { useCurrentAccess } from "@/hooks/use-current-access";
+import { useMetricSection } from "@/hooks/use-metric-section";
 import { canPerformAction } from "@/lib/access";
 import { startOfLocalDay } from "@/lib/date";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
-import type { PurchaseOrder } from "@/lib/types";
+import type { MaterialPurchaseRequest, PurchaseOrder } from "@/lib/types";
 import { useERPStore } from "@/store/use-erp-store";
+
+const purchasingMetricSections = {
+  "purchasing-requests": "requests",
+  "purchasing-orders": "orders",
+  "purchasing-needs": "needs",
+  "purchasing-offers": "offers",
+} as const;
 
 export default function PurchasingPage() {
   const [tab, setTab] = useState("orders");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [sourcePurchaseRequestId, setSourcePurchaseRequestId] = useState<string | null>(null);
   const [supplierId, setSupplierId] = useState("sup-sumber");
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const [purchaseCart, setPurchaseCart] = useState<Record<string, { quantity: string; unitPrice: string }>>({});
+  const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
+  const [receiptQuantities, setReceiptQuantities] = useState<Record<number, string>>({});
   const toast = useAppToast();
   const { role } = useCurrentAccess();
   const canCreatePurchaseOrder = canPerformAction(role, "purchasing.create");
   const canReceivePurchaseOrder = canPerformAction(role, "purchasing.receive");
   const purchaseOrders = useERPStore((state) => state.purchaseOrders);
+  const materialPurchaseRequests = useERPStore((state) => state.materialPurchaseRequests);
   const stocks = useERPStore((state) => state.stocks);
   const products = useERPStore((state) => state.products);
   const suppliers = useERPStore((state) => state.suppliers);
   const addPurchaseOrder = useERPStore((state) => state.addPurchaseOrder);
+  const sendPurchaseOrder = useERPStore((state) => state.sendPurchaseOrder);
   const receivePurchaseOrder = useERPStore((state) => state.receivePurchaseOrder);
+  useMetricSection(purchasingMetricSections, setTab);
   const productName = (id: string) => products.find((product) => product.id === id)?.name ?? id;
   const purchaseProducts = products.filter(
     (product) => product.type !== "Produk Jadi" && product.isActive && `${product.code} ${product.name}`.toLowerCase().includes(purchaseSearch.toLowerCase()),
@@ -73,6 +88,14 @@ export default function PurchasingPage() {
     const unitPrice = Number(line.unitPrice);
     return !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0;
   });
+  const receiptOrder = purchaseOrders.find((order) => order.id === receiptOrderId);
+  const receiptInvalid = receiptOrder
+    ? receiptOrder.items.some((item, index) => {
+        const quantity = Number(receiptQuantities[index] ?? "0");
+        const outstanding = item.quantity - item.receivedQty;
+        return !Number.isFinite(quantity) || quantity < 0 || quantity > outstanding;
+      }) || !receiptOrder.items.some((_, index) => Number(receiptQuantities[index] ?? "0") > 0)
+    : true;
 
   const addToPurchaseCart = (cartProductId: string) => {
     const product = products.find((item) => item.id === cartProductId);
@@ -96,7 +119,7 @@ export default function PurchasingPage() {
     });
   };
 
-  const openOrders = purchaseOrders.filter((item) => item.status !== "Diterima");
+  const openOrders = purchaseOrders.filter((item) => !["Diterima", "Ditutup"].includes(item.status));
   const pendingValue = openOrders.reduce((sum, item) => sum + item.total, 0);
   const overdue = openOrders.filter((item) => new Date(`${item.expectedAt}T00:00:00`) < startOfLocalDay());
   const needSuggestions = products
@@ -109,6 +132,29 @@ export default function PurchasingPage() {
       return { product, available, suggestedStock, suggestedPurchase: Math.ceil(suggestedStock / product.conversionValue) };
     })
     .filter((item) => item.available < item.product.minStock);
+
+  const requestColumns = useMemo<ColumnDef<MaterialPurchaseRequest>[]>(() => [
+    { header: "Permintaan", accessorKey: "number", cell: ({ row }) => <div><p className="font-mono text-xs font-semibold">{row.original.number}</p><p className="mt-0.5 font-mono text-[11px] text-[var(--app-text-muted)]">{row.original.productionBatchNumber}</p></div> },
+    { header: "Dibutuhkan", accessorKey: "neededAt", cell: ({ getValue }) => formatDate(String(getValue()), "dd MMM, HH:mm") },
+    { header: "Kekurangan bahan", accessorFn: (row) => row.items.map((item) => productName(item.productId)).join(" "), cell: ({ row }) => <div className="space-y-1">{row.original.items.map((item) => <p key={item.productId} className="flex min-w-[250px] items-center justify-between gap-3 text-xs"><span>{productName(item.productId)}</span><strong className="tabular">{formatNumber(item.quantity)} {item.unit}</strong></p>)}</div> },
+    { header: "Prioritas", accessorKey: "priority", cell: ({ getValue }) => <StatusBadge status={String(getValue())} /> },
+    { header: "Status", accessorKey: "status", cell: ({ getValue }) => <StatusBadge status={String(getValue())} /> },
+    {
+      id: "action", header: "Tindakan Purchasing", cell: ({ row }) => {
+        if (!canCreatePurchaseOrder || row.original.status === "PO Dibuat" || row.original.status === "Selesai") return row.original.purchaseOrderId ? <span className="font-mono text-xs text-[var(--app-text-muted)]">PO sudah dibuat</span> : null;
+        return <Button size="small" appearance="primary" onClick={() => {
+          const cart = Object.fromEntries(row.original.items.map((item) => {
+            const product = products.find((candidate) => candidate.id === item.productId);
+            const quantityInPurchaseUnit = product?.conversionValue ? Math.ceil(item.quantity / product.conversionValue) : 0;
+            return [item.productId, { quantity: String(quantityInPurchaseUnit), unitPrice: String(product?.purchasePrice ?? 0) }];
+          }));
+          setPurchaseCart(cart);
+          setSourcePurchaseRequestId(row.original.id);
+          setDialogOpen(true);
+        }}>Buat PO</Button>;
+      },
+    },
+  ], [canCreatePurchaseOrder, products]);
 
   const columns = useMemo<ColumnDef<PurchaseOrder>[]>(
     () => [
@@ -132,56 +178,80 @@ export default function PurchasingPage() {
       {
         id: "action",
         header: "Tindakan",
-        cell: ({ row }) =>
-          canReceivePurchaseOrder && (row.original.status === "Dipesan" || row.original.status === "Diterima Sebagian") ? (
+        cell: ({ row }) => {
+          if (canCreatePurchaseOrder && row.original.status === "Draft") {
+            return (
+              <Button
+                appearance="primary"
+                size="small"
+                icon={<Cart24Regular />}
+                onClick={() => {
+                  try {
+                    sendPurchaseOrder(row.original.id);
+                    toast("PO berhasil dikirim", `${row.original.number} sekarang berstatus Dipesan dan siap diterima.`);
+                  } catch (error) {
+                    toast("PO tidak dapat dikirim", error instanceof Error ? error.message : "Coba lagi.", "error");
+                  }
+                }}
+              >
+                Kirim PO
+              </Button>
+            );
+          }
+          return canReceivePurchaseOrder && (row.original.status === "Dipesan" || row.original.status === "Diterima Sebagian") ? (
             <Button
               appearance="primary"
               size="small"
               icon={<ArrowDownload24Regular />}
               onClick={() => {
-                receivePurchaseOrder(row.original.id);
-                toast("Penerimaan dicatat", `${row.original.number} masuk antrean QC bahan.`);
+                setReceiptOrderId(row.original.id);
+                setReceiptQuantities(Object.fromEntries(row.original.items.map((item, index) => [index, String(item.quantity - item.receivedQty)])));
               }}
             >
               Terima
             </Button>
-          ) : null,
+          ) : null;
+        },
       },
     ],
-    [canReceivePurchaseOrder, products, receivePurchaseOrder, toast],
+    [canCreatePurchaseOrder, canReceivePurchaseOrder, products, sendPurchaseOrder, toast],
   );
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Purchasing"
-        description="Kelola kebutuhan bahan, pesanan pembelian, penerimaan, dan evaluasi supplier."
-        actions={canCreatePurchaseOrder ? <Button appearance="primary" icon={<Add20Regular />} onClick={() => setDialogOpen(true)}>Buat purchase order</Button> : null}
+        description="Terima perintah pembelian dari Gudang, buat PO ke supplier, dan pantau penerimaan bahan."
+        actions={canCreatePurchaseOrder ? <Button appearance="primary" icon={<Add20Regular />} onClick={() => { setSourcePurchaseRequestId(null); setPurchaseCart({}); setDialogOpen(true); }}>Buat purchase order</Button> : null}
       />
 
       <MetricStrip
         items={[
-          { label: "PO aktif", value: String(openOrders.length), detail: `${purchaseOrders.length} PO bulan ini`, trend: "neutral", icon: <Receipt24Regular />, onClick: () => setTab("orders") },
-          { label: "Nilai belum diterima", value: formatCurrency(pendingValue), detail: "Termasuk PO menunggu approval", trend: "neutral", icon: <Money24Regular />, onClick: () => setTab("orders") },
-          { label: "Bahan kritis", value: String(needSuggestions.length), detail: "Di bawah stok minimum", trend: "down", icon: <Warning24Regular />, onClick: () => setTab("needs") },
-          { label: "Pengiriman terlambat", value: String(overdue.length), detail: "Perlu follow-up supplier", trend: overdue.length ? "down" : "neutral", icon: <Clock24Regular />, onClick: () => setTab("orders") },
+          { label: "Permintaan Gudang", value: String(materialPurchaseRequests.filter((item) => item.status === "Baru" || item.status === "Diproses").length), detail: "Kekurangan bahan produksi", trend: materialPurchaseRequests.some((item) => item.status === "Baru") ? "down" : "neutral", icon: <Warning24Regular />, onClick: () => setTab("requests"), targetId: "purchasing-requests" },
+          { label: "PO aktif", value: String(openOrders.length), detail: `${purchaseOrders.length} PO bulan ini`, trend: "neutral", icon: <Receipt24Regular />, onClick: () => setTab("orders"), targetId: "purchasing-orders" },
+          { label: "Nilai belum diterima", value: formatCurrency(pendingValue), detail: "PO aktif dan langsung diproses", trend: "neutral", icon: <Money24Regular />, onClick: () => setTab("orders"), targetId: "purchasing-orders" },
+          { label: "Bahan kritis", value: String(needSuggestions.length), detail: "Di bawah stok minimum", trend: "down", icon: <Warning24Regular />, onClick: () => setTab("needs"), targetId: "purchasing-needs" },
+          { label: "Pengiriman terlambat", value: String(overdue.length), detail: "Perlu follow-up supplier", trend: overdue.length ? "down" : "neutral", icon: <Clock24Regular />, onClick: () => setTab("orders"), targetId: "purchasing-orders" },
         ]}
       />
 
       <TabList selectedValue={tab} onTabSelect={(_, data) => setTab(String(data.value))} className="overflow-x-auto">
+        <Tab value="requests">Permintaan Gudang</Tab>
         <Tab value="orders">Purchase order</Tab>
         <Tab value="needs">Saran kebutuhan</Tab>
         <Tab value="offers">Perbandingan supplier</Tab>
       </TabList>
 
+      {tab === "requests" ? <SectionPanel id="purchasing-requests" title="Perintah pembelian dari Gudang" description="Daftar ini berasal dari permintaan Produksi yang tidak dapat dipenuhi stok Gudang." noPadding><DataTable data={materialPurchaseRequests} columns={requestColumns} searchPlaceholder="Cari permintaan, batch, atau bahan..." emptyTitle="Belum ada permintaan Gudang" emptyDescription="Kekurangan bahan Produksi yang diteruskan Gudang akan tampil di sini." /></SectionPanel> : null}
+
       {tab === "orders" ? (
-        <SectionPanel noPadding>
+        <SectionPanel id="purchasing-orders" title="Purchase order" description="Daftar PO, status pemesanan, penerimaan, nilai, dan tindak lanjut supplier." noPadding>
           <DataTable data={purchaseOrders} columns={columns} searchPlaceholder="Cari PO, supplier, barang..." />
         </SectionPanel>
       ) : null}
 
       {tab === "needs" ? (
-        <SectionPanel title="Saran pembelian" description="Dihitung dari stok tersedia, minimum, reservasi, dan pesanan aktif." noPadding>
+        <SectionPanel id="purchasing-needs" title="Saran pembelian" description="Dihitung dari stok tersedia, minimum, reservasi, dan pesanan aktif." noPadding>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-[var(--app-surface-2)] text-left text-[11px] uppercase tracking-[0.08em] text-[var(--app-text-muted)]">
@@ -204,46 +274,27 @@ export default function PurchasingPage() {
       ) : null}
 
       {tab === "offers" ? (
-        <SectionPanel title="Penawaran tepung terigu" description="Perbandingan untuk 2 Karung; 1 Karung = 25 Kg, sehingga stok masuk 50 Kg.">
-          <div className="grid gap-3 lg:grid-cols-2">
-            {[
-              { name: "CV Sumber Pangan Jaya", price: 300000, lead: "1 hari", terms: "14 hari", qc: "98,2% lulus", choice: "Direkomendasikan" },
-              { name: "PT Bahan Roti Mandiri", price: 305000, lead: "2 hari", terms: "21 hari", qc: "99,1% lulus", choice: "Alternatif" },
-            ].map((offer) => (
-              <button
-                key={offer.name}
-                type="button"
-                disabled={!canCreatePurchaseOrder}
-                className="focus-ring rounded-xl border border-[var(--app-border)] p-4 text-left transition-colors enabled:hover:bg-[var(--app-surface-2)] disabled:cursor-default"
-                onClick={() => {
-                  setSupplierId(offer.name === "CV Sumber Pangan Jaya" ? "sup-sumber" : "sup-bahan-roti");
-                  setPurchaseCart({ "raw-tepung": { quantity: "2", unitPrice: String(offer.price) } });
-                  setDialogOpen(true);
-                }}
-              >
-                <div className="flex items-start justify-between gap-3"><h3 className="text-sm font-semibold">{offer.name}</h3><StatusBadge status={offer.choice} /></div>
-                <p className="tabular mt-4 text-xl font-semibold">{formatCurrency(offer.price)} <span className="text-xs font-normal text-[var(--app-text-muted)]">/ Karung</span></p>
-                <dl className="mt-4 grid grid-cols-3 gap-3 text-xs">
-                  <div><dt className="text-[var(--app-text-muted)]">Pengiriman</dt><dd className="mt-1 font-medium">{offer.lead}</dd></div>
-                  <div><dt className="text-[var(--app-text-muted)]">Termin</dt><dd className="mt-1 font-medium">{offer.terms}</dd></div>
-                  <div><dt className="text-[var(--app-text-muted)]">Kualitas</dt><dd className="mt-1 font-medium">{offer.qc}</dd></div>
-                </dl>
-                {canCreatePurchaseOrder ? <p className="mt-4 text-xs font-semibold text-[var(--app-accent)]">Gunakan penawaran ini</p> : null}
-              </button>
-            ))}
-          </div>
-        </SectionPanel>
+        <div id="purchasing-offers" className="scroll-mt-24"><SupplierComparison
+          canCreatePurchaseOrder={canCreatePurchaseOrder}
+          onUseQuotation={(quotation, quantity) => {
+            setSourcePurchaseRequestId(null);
+            setSupplierId(quotation.supplierId);
+            setPurchaseCart({ [quotation.productId]: { quantity: String(quantity), unitPrice: String(quotation.unitPrice) } });
+            setDialogOpen(true);
+          }}
+        /></div>
       ) : null}
 
       <Dialog open={canCreatePurchaseOrder && dialogOpen} onOpenChange={(_, data) => setDialogOpen(data.open)}>
-        <DialogSurface className="!max-w-5xl">
+        <DialogSurface className="erp-dialog--xwide">
           <DialogBody>
             <DialogTitle>Buat purchase order</DialogTitle>
             <DialogContent className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
+              {sourcePurchaseRequestId ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">PO ini menindaklanjuti <strong className="font-mono">{materialPurchaseRequests.find((item) => item.id === sourcePurchaseRequestId)?.number}</strong> dari Gudang. Jumlah telah dikonversi dari kekurangan satuan stok ke satuan beli.</div> : null}
               <Field label="Supplier"><Select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>{suppliers.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</Select></Field>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(380px,1fr)]">
-                <section className="rounded-xl border border-[var(--app-border)] p-3">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,1fr)]">
+                <section className="min-w-0 rounded-xl border border-[var(--app-border)] p-3">
                   <div className="mb-3">
                     <h3 className="text-sm font-semibold">Pilih Barang/Bahan</h3>
                     <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Klik beberapa barang untuk memasukkannya ke satu PO.</p>
@@ -283,7 +334,7 @@ export default function PurchasingPage() {
                   </div>
                 </section>
 
-                <section className="overflow-hidden rounded-xl border border-[var(--app-border)]">
+                <section className="min-w-0 overflow-hidden rounded-xl border border-[var(--app-border)]">
                   <div className="border-b border-[var(--app-border)] px-3 py-2.5">
                     <h3 className="text-sm font-semibold">Isi purchase order</h3>
                     <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">{purchaseCartLines.length} jenis barang · satu nomor PO</p>
@@ -361,7 +412,7 @@ export default function PurchasingPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--app-border)] pt-2 text-xs text-[var(--app-text-muted)]">
                   <span>Tempo {suppliers.find((supplier) => supplier.id === supplierId)?.paymentTermsDays ?? 0} hari · Konversi disimpan per item</span>
-                  <strong className={purchaseTotal > 3000000 ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}>{purchaseCartLines.length ? (purchaseTotal > 3000000 ? "Menunggu Persetujuan" : "Langsung Dipesan") : "Pilih barang"}</strong>
+                  <strong className="text-emerald-700 dark:text-emerald-300">{purchaseCartLines.length ? "Langsung Dipesan" : "Pilih barang"}</strong>
                 </div>
               </div>
             </DialogContent>
@@ -376,9 +427,10 @@ export default function PurchasingPage() {
                       productId: line.product.id,
                       quantity: Number(line.quantity),
                       unitPrice: Number(line.unitPrice),
-                    })));
+                    })), sourcePurchaseRequestId ?? undefined);
                     setPurchaseCart({});
                     setPurchaseSearch("");
+                    setSourcePurchaseRequestId(null);
                     setDialogOpen(false);
                     toast("Purchase order dibuat", `${order.number} · ${order.items.length} barang · ${formatCurrency(order.total)}`);
                   } catch (error) {
@@ -387,6 +439,80 @@ export default function PurchasingPage() {
                 }}
               >
                 Simpan 1 PO · {formatCurrency(purchaseTotal)}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Dialog
+        open={canReceivePurchaseOrder && Boolean(receiptOrder)}
+        onOpenChange={(_, data) => {
+          if (!data.open) {
+            setReceiptOrderId(null);
+            setReceiptQuantities({});
+          }
+        }}
+      >
+        <DialogSurface className="erp-dialog--wide">
+          <DialogBody>
+            <DialogTitle>Catat penerimaan barang</DialogTitle>
+            <DialogContent className="space-y-4">
+              <div className="rounded-lg bg-[var(--app-surface-2)] p-3 text-sm">
+                <p className="font-mono text-xs font-semibold">{receiptOrder?.number}</p>
+                <p className="mt-1 text-xs text-[var(--app-text-muted)]">
+                  Isi jumlah yang benar-benar diterima. Sisa PO tetap terbuka dan setiap penerimaan memperoleh nomor GR serta lot unik.
+                </p>
+              </div>
+              <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-1">
+                {receiptOrder?.items.map((item, index) => {
+                  const outstanding = item.quantity - item.receivedQty;
+                  return (
+                    <div key={`${item.productId}-${index}`} className="grid gap-2 rounded-lg border border-[var(--app-border)] p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
+                      <div>
+                        <p className="text-sm font-semibold">{productName(item.productId)}</p>
+                        <p className="mt-1 text-xs text-[var(--app-text-muted)]">
+                          Dipesan {formatNumber(item.quantity, 6)} · sudah diterima {formatNumber(item.receivedQty, 6)} · sisa {formatNumber(outstanding, 6)} {item.purchaseUnit}
+                        </p>
+                      </div>
+                      <Field label="Diterima sekarang">
+                        <Input
+                          type="number"
+                          min="0"
+                          max={String(outstanding)}
+                          step="any"
+                          value={receiptQuantities[index] ?? "0"}
+                          contentAfter={item.purchaseUnit}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onChange={(_, data) => setReceiptQuantities((current) => ({ ...current, [index]: data.value }))}
+                        />
+                      </Field>
+                    </div>
+                  );
+                })}
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => { setReceiptOrderId(null); setReceiptQuantities({}); }}>Batal</Button>
+              <Button
+                appearance="primary"
+                disabled={receiptInvalid}
+                onClick={() => {
+                  if (!receiptOrder) return;
+                  try {
+                    const receipt = receivePurchaseOrder(
+                      receiptOrder.id,
+                      receiptOrder.items.map((_, index) => Number(receiptQuantities[index] ?? "0")),
+                    );
+                    setReceiptOrderId(null);
+                    setReceiptQuantities({});
+                    toast("Penerimaan dicatat", `${receipt.number} selesai; stok langsung masuk Gudang Bahan.`);
+                  } catch (error) {
+                    toast("Penerimaan gagal", error instanceof Error ? error.message : "Periksa kembali jumlah penerimaan.");
+                  }
+                }}
+              >
+                Simpan penerimaan
               </Button>
             </DialogActions>
           </DialogBody>

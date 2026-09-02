@@ -71,9 +71,9 @@ export function CustomerCategoryAnalyticsChart({ data }: { data: CustomerCategor
 }
 
 export function ProductionAnalyticsChart({ data }: { data: ProductionAnalyticsPoint[] }) {
-  if (!data.length) return <div className="h-[270px]"><ChartEmpty>Belum ada jadwal produksi pada periode ini.</ChartEmpty></div>;
+  if (!data.length) return <div className="h-[270px]"><ChartEmpty>Belum ada hasil produksi pada periode ini.</ChartEmpty></div>;
   return (
-    <div className="h-[270px]" aria-label="Grafik target dan hasil produksi per jadwal">
+      <div className="h-[270px]" aria-label="Grafik total hasil proses dan jumlah berhasil per batch">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="var(--app-border)" vertical={false} />
@@ -81,8 +81,8 @@ export function ProductionAnalyticsChart({ data }: { data: ProductionAnalyticsPo
           <YAxis tickFormatter={(value) => formatNumber(value)} tick={{ fill: "var(--app-text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
           <Tooltip formatter={(value) => `${formatNumber(Number(value))} unit`} contentStyle={tooltipStyle} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="target" name="Target" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={28} />
-          <Bar dataKey="actual" name="Aktual" fill="#0f766e" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="target" name="Total proses" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="actual" name="Berhasil" fill="#0f766e" radius={[4, 4, 0, 0]} maxBarSize={28} />
         </BarChart>
       </ResponsiveContainer>
     </div>

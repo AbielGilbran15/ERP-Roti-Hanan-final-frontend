@@ -28,19 +28,38 @@ import {
 } from "@fluentui/react-icons";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/ui/data-table";
+import { ProductClassificationPanel } from "@/components/master-data/product-classification-panel";
 import { MetricStrip, type MetricItem } from "@/components/ui/metric-strip";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionPanel } from "@/components/ui/section-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useAppToast } from "@/components/ui/app-toast";
 import { useCurrentAccess } from "@/hooks/use-current-access";
+import { useMetricSection } from "@/hooks/use-metric-section";
 import { canManageMaster, canViewMasterSection } from "@/lib/access";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
+import {
+  buildFinishedProductName,
+  formatProductClassification,
+  getFinishedProductCategory,
+  getFinishedProductVariant,
+  getTypesForCategory,
+  getVariantsForType,
+} from "@/lib/product-classification";
 import type { AuditLog, Customer, CustomerCategory, Product, Supplier } from "@/lib/types";
-import { calculatePurchaseConversion, describeUnitCompatibility, unitGroups, type UnitFamily } from "@/lib/units";
+import { calculatePurchaseConversion, convertUnit, describeUnitCompatibility, unitGroups, type UnitFamily } from "@/lib/units";
 import { useERPStore } from "@/store/use-erp-store";
 
-type MasterTab = "agent-1" | "agent-2" | "suppliers" | "materials" | "finished-products" | "audit";
+type MasterTab = "agent-1" | "agent-2" | "suppliers" | "materials" | "product-classification" | "finished-products" | "audit";
+
+const masterMetricSections: Readonly<Record<string, MasterTab>> = {
+  "master-agents": "agent-1",
+  "master-suppliers": "suppliers",
+  "master-materials": "materials",
+  "master-classification": "product-classification",
+  "master-finished-products": "finished-products",
+  "master-audit": "audit",
+};
 
 const emptyCustomer = (category: CustomerCategory, sequence: number): Customer => ({
   id: "",
@@ -85,22 +104,26 @@ const emptyMaterial = (sequence: number): Product => ({
   agent2Price: 0,
   cost: 0,
   shelfLifeDays: 0,
+  minStockInputValue: 0,
+  minStockInputUnit: "Kg",
   minStock: 0,
-  requiresQc: true,
   notes: "",
   isActive: false,
 });
 
-const emptyFinishedProduct = (sequence: number): Product => ({
+const emptyFinishedProduct = (sequence: number, categoryId: string): Product => ({
   id: "",
   code: `RJ-${String(sequence).padStart(3, "0")}`,
   name: "",
   type: "Produk Jadi",
-  productType: "Roti Manis",
-  stockUnit: "Pcs",
+  finishedProductCategoryId: categoryId,
+  stockUnit: categoryId === "finished-category-roti-box" ? "Box" : "",
   conversionValue: 1,
   purchasePrice: 0,
-  salesUnit: "Pcs",
+  salesUnit: categoryId === "finished-category-roti-box" ? "Box" : "",
+  contentQuantity: undefined,
+  contentUnit: undefined,
+  packagingDescription: "",
   weightValue: 0,
   weightUnit: "Gram",
   agent1Price: 0,
@@ -108,7 +131,6 @@ const emptyFinishedProduct = (sequence: number): Product => ({
   cost: 0,
   shelfLifeDays: 3,
   minStock: 0,
-  requiresQc: true,
   notes: "",
   isActive: false,
 });
@@ -140,6 +162,9 @@ export default function MasterDataPage() {
   const customers = useERPStore((state) => state.customers);
   const suppliers = useERPStore((state) => state.suppliers);
   const products = useERPStore((state) => state.products);
+  const finishedProductCategories = useERPStore((state) => state.finishedProductCategories);
+  const finishedProductTypes = useERPStore((state) => state.finishedProductTypes);
+  const finishedProductVariants = useERPStore((state) => state.finishedProductVariants);
   const auditLogs = useERPStore((state) => state.auditLogs);
   const saveCustomer = useERPStore((state) => state.saveCustomer);
   const saveSupplier = useERPStore((state) => state.saveSupplier);
@@ -150,6 +175,7 @@ export default function MasterDataPage() {
     if (canViewMasterSection(role, "customers")) result.push({ value: "agent-1", label: "Agen 1" }, { value: "agent-2", label: "Agen 2" });
     if (canViewMasterSection(role, "suppliers")) result.push({ value: "suppliers", label: "Supplier" });
     if (canViewMasterSection(role, "materials")) result.push({ value: "materials", label: "Barang/Bahan" });
+    if (canViewMasterSection(role, "product-classification")) result.push({ value: "product-classification", label: "Klasifikasi Produk" });
     if (canViewMasterSection(role, "finished-products")) result.push({ value: "finished-products", label: "Barang Jadi" });
     if (canViewMasterSection(role, "audit")) result.push({ value: "audit", label: "Riwayat perubahan" });
     return result;
@@ -159,29 +185,57 @@ export default function MasterDataPage() {
   const [customerDraft, setCustomerDraft] = useState<Customer | null>(null);
   const [supplierDraft, setSupplierDraft] = useState<Supplier | null>(null);
   const [productDraft, setProductDraft] = useState<Product | null>(null);
+  const [finishedCategoryFilter, setFinishedCategoryFilter] = useState("all");
+  const [finishedTypeFilter, setFinishedTypeFilter] = useState("all");
+  const [finishedVariantFilter, setFinishedVariantFilter] = useState("all");
 
   useEffect(() => {
     if (!tabs.some((item) => item.value === tab)) setTab(tabs[0]?.value ?? "materials");
   }, [tab, tabs]);
+  useMetricSection(masterMetricSections, setTab);
 
   const materials = products.filter((product) => product.type !== "Produk Jadi");
   const finishedProducts = products.filter((product) => product.type === "Produk Jadi");
+  const classificationData = useMemo(() => ({
+    categories: finishedProductCategories,
+    types: finishedProductTypes,
+    variants: finishedProductVariants,
+  }), [finishedProductCategories, finishedProductTypes, finishedProductVariants]);
+  const filteredFinishedProducts = finishedProducts.filter((product) =>
+    (finishedCategoryFilter === "all" || product.finishedProductCategoryId === finishedCategoryFilter) &&
+    (finishedTypeFilter === "all" || product.finishedProductTypeId === finishedTypeFilter) &&
+    (finishedVariantFilter === "all" || product.finishedProductVariantId === finishedVariantFilter),
+  );
   const customerProfile = canManageMaster(role, "customer.profile");
   const customerFinance = canManageMaster(role, "customer.finance");
   const supplierProfile = canManageMaster(role, "supplier.profile");
   const supplierFinance = canManageMaster(role, "supplier.finance");
   const materialPurchase = canManageMaster(role, "material.purchase");
   const materialStock = canManageMaster(role, "material.stock");
-  const materialQuality = canManageMaster(role, "material.quality");
   const finishedProduction = canManageMaster(role, "finished.production");
   const finishedStock = canManageMaster(role, "finished.stock");
   const finishedPrice = canManageMaster(role, "finished.price");
+  const finishedCost = canManageMaster(role, "finished.cost");
+  const draftCategory = productDraft?.type === "Produk Jadi" ? getFinishedProductCategory(classificationData, productDraft.finishedProductCategoryId) : undefined;
+  const draftTypes = productDraft?.type === "Produk Jadi" ? getTypesForCategory(classificationData, productDraft.finishedProductCategoryId) : [];
+  const draftVariants = productDraft?.type === "Produk Jadi" ? getVariantsForType(classificationData, productDraft.finishedProductTypeId) : [];
+  const draftVariant = productDraft?.type === "Produk Jadi" ? getFinishedProductVariant(classificationData, productDraft.finishedProductVariantId) : undefined;
+  const isDraftRotiBox = draftCategory?.id === "finished-category-roti-box";
+  const finishedTypeFilterOptions = finishedProductTypes.filter((item) => finishedCategoryFilter === "all" || item.categoryId === finishedCategoryFilter);
+  const finishedVariantFilterOptions = finishedProductVariants.filter((item) => {
+    if (finishedTypeFilter !== "all") return item.typeId === finishedTypeFilter;
+    if (finishedCategoryFilter === "all") return true;
+    return finishedProductTypes.some((type) => type.id === item.typeId && type.categoryId === finishedCategoryFilter);
+  });
   const materialAutomaticConversion = productDraft?.type !== "Produk Jadi" && productDraft?.stockUnit
     ? calculatePurchaseConversion(
         productDraft.purchaseContentValue ?? 0,
         productDraft.purchaseContentUnit ?? "",
         productDraft.stockUnit,
       )
+    : null;
+  const materialMinimumInStockUnit = productDraft?.type !== "Produk Jadi" && productDraft?.stockUnit
+    ? convertUnit(productDraft.minStockInputValue ?? 0, productDraft.purchaseContentUnit ?? "", productDraft.stockUnit)
     : null;
 
   const openNewCustomer = (category: CustomerCategory) => {
@@ -213,23 +267,22 @@ export default function MasterDataPage() {
     { header: "Barang/Bahan", accessorFn: (row) => `${row.code} ${row.name}`, cell: ({ row }) => <div><p className="font-medium">{row.original.name}</p><p className="font-mono text-[11px] text-[var(--app-text-muted)]">{row.original.code} · {row.original.type}</p></div> },
     { header: "Konversi otomatis", accessorFn: (row) => `${row.purchaseUnit} ${row.purchaseContentUnit} ${row.stockUnit}`, cell: ({ row }) => <div><p>1 {row.original.purchaseUnit} = <strong className="tabular">{formatNumber(row.original.purchaseContentValue ?? 0, 6)}</strong> {row.original.purchaseContentUnit}</p><p className="text-xs text-[var(--app-text-muted)]">Hasil: {formatNumber(row.original.conversionValue, 6)} {row.original.stockUnit}/ {row.original.purchaseUnit}</p></div> },
     { header: "Harga beli", accessorKey: "purchasePrice", cell: ({ row }) => <div><p className="tabular font-medium">{formatCurrency(row.original.purchasePrice)}/{row.original.purchaseUnit}</p><p className="tabular text-xs text-[var(--app-text-muted)]">{formatCurrency(row.original.cost)}/{row.original.stockUnit}</p></div> },
-    { header: "Minimum", accessorKey: "minStock", cell: ({ row }) => <span className="tabular">{formatNumber(row.original.minStock)} {row.original.stockUnit}</span> },
+    { header: "Stok minimum", accessorKey: "minStock", cell: ({ row }) => <div><p className="tabular font-medium">{formatNumber(row.original.minStockInputValue ?? 0)} {row.original.minStockInputUnit ?? row.original.purchaseContentUnit}</p><p className="tabular text-xs text-[var(--app-text-muted)]">Hasil: {formatNumber(row.original.minStock)} {row.original.stockUnit}</p></div> },
     { header: "Umur simpan", accessorKey: "shelfLifeDays", cell: ({ getValue }) => `${Number(getValue())} hari` },
-    { header: "QC", accessorKey: "requiresQc", cell: ({ getValue }) => <StatusBadge status={getValue() ? "Wajib QC" : "Pemeriksaan Gudang"} /> },
     { header: "Status", accessorKey: "isActive", cell: ({ getValue }) => <StatusBadge status={getValue() ? "Aktif" : "Nonaktif"} /> },
-    ...(materialPurchase || materialStock || materialQuality ? [{ id: "action", header: "Tindakan", cell: ({ row }: { row: { original: Product } }) => <EditButton label="Kelola" onClick={() => setProductDraft({ ...row.original })} /> }] : []),
-  ], [materialPurchase, materialQuality, materialStock]);
+    ...(materialPurchase || materialStock ? [{ id: "action", header: "Tindakan", cell: ({ row }: { row: { original: Product } }) => <EditButton label="Kelola" onClick={() => setProductDraft({ ...row.original, minStockInputValue: row.original.minStockInputValue ?? row.original.minStock, minStockInputUnit: row.original.purchaseContentUnit })} /> }] : []),
+  ], [materialPurchase, materialStock]);
 
   const finishedColumns = useMemo<ColumnDef<Product>[]>(() => [
-    { header: "Barang Jadi", accessorFn: (row) => `${row.code} ${row.name}`, cell: ({ row }) => <div><p className="font-medium">{row.original.name}</p><p className="font-mono text-[11px] text-[var(--app-text-muted)]">{row.original.code} · {row.original.productType}</p></div> },
-    { header: "Jual / Berat", accessorFn: (row) => `${row.salesUnit} ${row.weightValue}`, cell: ({ row }) => <div><p>{row.original.salesUnit}</p><p className="tabular text-xs text-[var(--app-text-muted)]">{formatNumber(row.original.weightValue ?? 0)} {row.original.weightUnit}</p></div> },
+    { header: "Barang Jadi", accessorFn: (row) => `${row.code} ${row.name} ${formatProductClassification(row, classificationData)}`, cell: ({ row }) => <div><p className="font-medium">{row.original.name}</p><p className="font-mono text-[11px] text-[var(--app-text-muted)]">{row.original.code}</p><p className="mt-1 text-xs text-[var(--app-text-muted)]">{formatProductClassification(row.original, classificationData)}</p></div> },
+    { header: "Satuan / Isi / Berat", accessorFn: (row) => `${row.salesUnit} ${row.contentQuantity} ${row.weightValue}`, cell: ({ row }) => <div><p>{row.original.salesUnit || "Belum ditentukan"}</p><p className="tabular text-xs text-[var(--app-text-muted)]">{row.original.contentQuantity ? `${formatNumber(row.original.contentQuantity)} ${row.original.contentUnit ?? "Roti"} / ${row.original.salesUnit}` : "Jumlah isi belum diketahui"}</p><p className="tabular text-xs text-[var(--app-text-muted)]">{row.original.weightValue ? `${formatNumber(row.original.weightValue)} ${row.original.weightUnit}` : "Berat belum diisi"}</p></div> },
     { header: "Umur / Minimum", accessorFn: (row) => `${row.shelfLifeDays} ${row.minStock}`, cell: ({ row }) => <div><p>{row.original.shelfLifeDays} hari</p><p className="tabular text-xs text-[var(--app-text-muted)]">Min. {formatNumber(row.original.minStock)} {row.original.stockUnit}</p></div> },
     { header: "Harga Agen 1", accessorKey: "agent1Price", cell: ({ getValue }) => <span className="tabular font-medium">{formatCurrency(Number(getValue()))}</span> },
     { header: "Harga Agen 2", accessorKey: "agent2Price", cell: ({ getValue }) => <span className="tabular font-medium">{formatCurrency(Number(getValue()))}</span> },
-    { header: "QC akhir", accessorKey: "requiresQc", cell: () => <StatusBadge status="Wajib QC" /> },
-    { header: "Status", accessorKey: "isActive", cell: ({ getValue }) => <StatusBadge status={getValue() ? "Aktif" : "Nonaktif"} /> },
-    ...(finishedProduction || finishedStock || finishedPrice ? [{ id: "action", header: "Tindakan", cell: ({ row }: { row: { original: Product } }) => <EditButton label="Kelola" onClick={() => setProductDraft({ ...row.original })} /> }] : []),
-  ], [finishedPrice, finishedProduction, finishedStock]);
+    { header: "HPP", accessorKey: "cost", cell: ({ row }) => <span className="tabular font-medium">{formatCurrency(row.original.cost)}/{row.original.stockUnit}</span> },
+    { header: "Status", accessorKey: "isActive", cell: ({ row }) => <div className="space-y-1"><StatusBadge status={row.original.isActive ? "Aktif" : "Nonaktif"} />{!row.original.isActive && (!row.original.salesUnit || !row.original.weightValue || !row.original.agent1Price || !row.original.agent2Price) ? <p className="text-[10px] text-[var(--app-text-muted)]">Draft belum lengkap</p> : null}</div> },
+    ...(finishedProduction || finishedStock || finishedPrice || finishedCost ? [{ id: "action", header: "Tindakan", cell: ({ row }: { row: { original: Product } }) => <EditButton label="Kelola" onClick={() => setProductDraft({ ...row.original })} /> }] : []),
+  ], [classificationData, finishedCost, finishedPrice, finishedProduction, finishedStock]);
 
   const auditColumns = useMemo<ColumnDef<AuditLog>[]>(() => [
     { header: "Waktu", accessorKey: "createdAt", cell: ({ getValue }) => formatDateTime(String(getValue())) },
@@ -275,10 +328,10 @@ export default function MasterDataPage() {
   const customerCategory = tab === "agent-2" ? "Agen 2" : "Agen 1";
   const customerData = customers.filter((customer) => customer.category === customerCategory);
   const metricItems: MetricItem[] = [];
-  if (canViewMasterSection(role, "customers")) metricItems.push({ label: "Agen aktif", value: String(customers.filter((item) => item.isActive).length), detail: `${customers.filter((item) => item.category === "Agen 1").length} Agen 1 · ${customers.filter((item) => item.category === "Agen 2").length} Agen 2`, trend: "neutral", icon: <People24Regular />, onClick: () => setTab("agent-1") });
-  if (canViewMasterSection(role, "suppliers")) metricItems.push({ label: "Supplier aktif", value: String(suppliers.filter((item) => item.isActive).length), detail: `${suppliers.length} supplier terdaftar`, trend: "neutral", icon: <Database24Regular />, onClick: () => setTab("suppliers") });
-  if (canViewMasterSection(role, "materials")) metricItems.push({ label: "Barang/Bahan", value: String(materials.length), detail: `${materials.filter((item) => item.requiresQc).length} wajib QC`, trend: "neutral", icon: <Box24Regular />, onClick: () => setTab("materials") });
-  if (canViewMasterSection(role, "finished-products")) metricItems.push({ label: "Barang Jadi", value: String(finishedProducts.length), detail: "Dua harga kategori · QC akhir wajib", trend: "neutral", icon: <Food24Regular />, onClick: () => setTab("finished-products") });
+  if (canViewMasterSection(role, "customers")) metricItems.push({ label: "Agen aktif", value: String(customers.filter((item) => item.isActive).length), detail: `${customers.filter((item) => item.category === "Agen 1").length} Agen 1 · ${customers.filter((item) => item.category === "Agen 2").length} Agen 2`, trend: "neutral", icon: <People24Regular />, onClick: () => setTab("agent-1"), targetId: "master-agents" });
+  if (canViewMasterSection(role, "suppliers")) metricItems.push({ label: "Supplier aktif", value: String(suppliers.filter((item) => item.isActive).length), detail: `${suppliers.length} supplier terdaftar`, trend: "neutral", icon: <Database24Regular />, onClick: () => setTab("suppliers"), targetId: "master-suppliers" });
+  if (canViewMasterSection(role, "materials")) metricItems.push({ label: "Barang/Bahan", value: String(materials.length), detail: "Bahan Baku · Toping · Kemasan", trend: "neutral", icon: <Box24Regular />, onClick: () => setTab("materials"), targetId: "master-materials" });
+  if (canViewMasterSection(role, "finished-products")) metricItems.push({ label: "Barang Jadi", value: String(finishedProducts.length), detail: `${finishedProducts.filter((item) => item.cost > 0).length} SKU memiliki HPP`, trend: "neutral", icon: <Food24Regular />, onClick: () => setTab("finished-products"), targetId: "master-finished-products" });
 
   return (
     <div className="space-y-5">
@@ -292,6 +345,7 @@ export default function MasterDataPage() {
 
       {tab === "agent-1" || tab === "agent-2" ? (
         <SectionPanel
+          id="master-agents"
           title={`Master ${customerCategory}`}
           description="Identitas dikelola Sales; tempo dan batas kredit dikelola Finance. Pelanggan nonaktif tetap ada pada histori."
           action={customerProfile ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => openNewCustomer(customerCategory)}>Tambah {customerCategory}</Button> : undefined}
@@ -302,25 +356,32 @@ export default function MasterDataPage() {
       ) : null}
 
       {tab === "suppliers" ? (
-        <SectionPanel title="Master Supplier" description="Kode supplier unik dipakai oleh PO, penerimaan, QC, utang, dan evaluasi supplier." action={supplierProfile ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setSupplierDraft(emptySupplier(suppliers.length + 1))}>Tambah supplier</Button> : undefined} noPadding>
+        <SectionPanel id="master-suppliers" title="Master Supplier" description="Kode supplier unik dipakai oleh PO, penerimaan barang, utang, dan evaluasi supplier." action={supplierProfile ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setSupplierDraft(emptySupplier(suppliers.length + 1))}>Tambah supplier</Button> : undefined} noPadding>
           <DataTable data={suppliers} columns={supplierColumns} searchPlaceholder="Cari kode, supplier, kontak, atau kota..." />
         </SectionPanel>
       ) : null}
 
       {tab === "materials" ? (
-        <SectionPanel title="Master Barang/Bahan" description="Hanya Bahan Baku dan Kemasan. Pembelian memakai satuan beli; stok selalu memakai satuan stok." action={materialPurchase ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setProductDraft(emptyMaterial(materials.length + 1))}>Tambah barang/bahan</Button> : undefined} noPadding>
+        <SectionPanel id="master-materials" title="Master Barang/Bahan" description="Kelola Bahan Baku, Bahan Baku Toping, dan Kemasan. Pembelian memakai satuan beli; stok selalu memakai satuan stok." action={materialPurchase ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setProductDraft(emptyMaterial(materials.length + 1))}>Tambah barang/bahan</Button> : undefined} noPadding>
           <DataTable data={materials} columns={materialColumns} searchPlaceholder="Cari kode, nama, jenis, atau satuan..." />
         </SectionPanel>
       ) : null}
 
+      {tab === "product-classification" ? <div id="master-classification" className="scroll-mt-24"><ProductClassificationPanel /></div> : null}
+
       {tab === "finished-products" ? (
-        <SectionPanel title="Master Barang Jadi" description="Terpisah dari Barang/Bahan. Satuan jual sama dengan stok, memiliki Harga Agen 1 dan Agen 2, serta QC akhir wajib." action={finishedProduction ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setProductDraft(emptyFinishedProduct(finishedProducts.length + 1))}>Tambah Barang Jadi</Button> : undefined} noPadding>
-          <DataTable data={finishedProducts} columns={finishedColumns} searchPlaceholder="Cari kode, produk, jenis, atau harga..." />
+        <SectionPanel id="master-finished-products" title="Master Barang Jadi / SKU" description="Setiap kombinasi akhir kategori, tipe, dan varian menjadi satu SKU. Seluruh Roti Box memakai satuan Box; jumlah roti per box boleh belum diisi." action={finishedProduction ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setProductDraft(emptyFinishedProduct(finishedProducts.length + 1, finishedProductCategories.find((item) => item.id === "finished-category-roti-box")?.id ?? finishedProductCategories[0]?.id ?? ""))}>Tambah SKU</Button> : undefined} noPadding>
+          <div className="grid gap-3 border-b border-[var(--app-border)] p-4 sm:grid-cols-3">
+            <Field label="Kategori"><Select value={finishedCategoryFilter} onChange={(event) => { setFinishedCategoryFilter(event.target.value); setFinishedTypeFilter("all"); setFinishedVariantFilter("all"); }}><option value="all">Semua kategori</option>{finishedProductCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label="Tipe"><Select value={finishedTypeFilter} onChange={(event) => { setFinishedTypeFilter(event.target.value); setFinishedVariantFilter("all"); }}><option value="all">Semua tipe</option>{finishedTypeFilterOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+            <Field label="Varian"><Select value={finishedVariantFilter} onChange={(event) => setFinishedVariantFilter(event.target.value)}><option value="all">Semua varian</option>{finishedVariantFilterOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+          </div>
+          <DataTable data={filteredFinishedProducts} columns={finishedColumns} searchPlaceholder="Cari kode, SKU, kategori, tipe, varian, atau harga..." />
         </SectionPanel>
       ) : null}
 
       {tab === "audit" ? (
-        <SectionPanel title="Riwayat perubahan Master Data" description="Nilai lama/baru, pelaku, dan waktu perubahan tersimpan dan tidak dapat diedit." noPadding>
+        <SectionPanel id="master-audit" title="Riwayat perubahan Master Data" description="Nilai lama/baru, pelaku, dan waktu perubahan tersimpan dan tidak dapat diedit." noPadding>
           <DataTable data={auditLogs} columns={auditColumns} searchPlaceholder="Cari master, record, perubahan, atau pelaku..." emptyTitle="Belum ada perubahan" emptyDescription="Perubahan Master Data akan muncul di sini." />
         </SectionPanel>
       ) : null}
@@ -380,40 +441,63 @@ export default function MasterDataPage() {
       </Dialog>
 
       <Dialog open={Boolean(productDraft)} onOpenChange={(_, data) => !data.open && setProductDraft(null)}>
-        <DialogSurface className="!max-w-2xl">
+        <DialogSurface className="erp-dialog--medium">
           <DialogBody>
             <DialogTitle>{productDraft?.id ? `Kelola ${productDraft.type === "Produk Jadi" ? "Barang Jadi" : "Barang/Bahan"}` : `Tambah ${productDraft?.type === "Produk Jadi" ? "Barang Jadi" : "Barang/Bahan"}`}</DialogTitle>
             <DialogContent className="space-y-4">
               {productDraft?.type === "Produk Jadi" ? (
                 <>
-                  <PermissionNote>Produksi mengelola identitas/spesifikasi, Gudang mengelola stok minimum, Sales mengelola dua harga kategori. QC akhir selalu wajib.</PermissionNote>
+                  <PermissionNote>Produksi mengelola klasifikasi dan spesifikasi, Gudang mengelola stok minimum, Sales mengelola dua harga kategori, dan Finance/Owner mengelola HPP master.</PermissionNote>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Kode produk" required><Input value={productDraft.code} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, code: data.value } : current)} /></Field>
-                    <Field label="Jenis produk" required><Input value={productDraft.productType ?? ""} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, productType: data.value } : current)} /></Field>
+                    <Field label="Kode SKU" required><Input value={productDraft.code} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, code: data.value } : current)} /></Field>
+                    <Field label="Kategori" required><Select value={productDraft.finishedProductCategoryId ?? ""} disabled={!finishedProduction} onChange={(event) => setProductDraft((current) => {
+                      if (!current) return current;
+                      const categoryId = event.target.value;
+                      const next = { ...current, finishedProductCategoryId: categoryId, finishedProductTypeId: undefined, finishedProductVariantId: undefined };
+                      if (categoryId === "finished-category-roti-box") Object.assign(next, { salesUnit: "Box", stockUnit: "Box" });
+                      else Object.assign(next, { salesUnit: "", stockUnit: "", contentQuantity: undefined, contentUnit: undefined });
+                      return { ...next, name: buildFinishedProductName(next, classificationData) };
+                    })}><option value="">Pilih kategori</option>{finishedProductCategories.map((item) => <option key={item.id} value={item.id} disabled={!item.isActive && item.id !== productDraft.finishedProductCategoryId}>{item.name}</option>)}</Select></Field>
                   </div>
-                  <Field label="Nama produk" required><Input value={productDraft.name} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, name: data.value } : current)} /></Field>
+                  {draftCategory?.requiresType ? <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Tipe" required><Select value={productDraft.finishedProductTypeId ?? ""} disabled={!finishedProduction} onChange={(event) => setProductDraft((current) => {
+                      if (!current) return current;
+                      const next = { ...current, finishedProductTypeId: event.target.value || undefined, finishedProductVariantId: undefined };
+                      return { ...next, name: buildFinishedProductName(next, classificationData) };
+                    })}><option value="">Pilih tipe</option>{draftTypes.map((item) => <option key={item.id} value={item.id} disabled={!item.isActive && item.id !== productDraft.finishedProductTypeId}>{item.name}</option>)}</Select></Field>
+                    {draftCategory.requiresVariant ? <Field label="Varian" required><Select value={productDraft.finishedProductVariantId ?? ""} disabled={!finishedProduction || !productDraft.finishedProductTypeId} onChange={(event) => setProductDraft((current) => {
+                      if (!current) return current;
+                      const next = { ...current, finishedProductVariantId: event.target.value || undefined };
+                      return { ...next, name: buildFinishedProductName(next, classificationData) };
+                    })}><option value="">Pilih varian</option>{draftVariants.map((item) => <option key={item.id} value={item.id} disabled={!item.isActive && item.id !== productDraft.finishedProductVariantId}>{item.name}</option>)}</Select></Field> : null}
+                  </div> : null}
+                  <Field label="Nama SKU" hint="Dibentuk otomatis dari kategori, tipe, dan varian."><Input readOnly value={productDraft.name || buildFinishedProductName(productDraft, classificationData)} /></Field>
+                  {draftVariant?.description ? <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-2)] p-3 text-xs leading-5"><strong>Deskripsi varian:</strong> {draftVariant.description}</div> : null}
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <Field label="Satuan jual/stok" required><Select value={productDraft.salesUnit ?? ""} disabled={!finishedProduction} onChange={(event) => setProductDraft((current) => current ? { ...current, salesUnit: event.target.value, stockUnit: event.target.value } : current)}><UnitOptions /></Select></Field>
-                    <Field label="Berat" required><Input type="number" min="0" value={String(productDraft.weightValue ?? 0)} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, weightValue: Number(data.value) || 0 } : current)} /></Field>
-                    <Field label="Satuan berat" required><Select value={productDraft.weightUnit ?? ""} disabled={!finishedProduction} onChange={(event) => setProductDraft((current) => current ? { ...current, weightUnit: event.target.value } : current)}><UnitOptions families={["Berat"]} /></Select></Field>
+                    <Field label="Satuan jual/stok" required={productDraft.isActive} hint={isDraftRotiBox ? "Terkunci sesuai Q47." : "Roti Black Forest belum dikonfirmasi (Q52)."}>{isDraftRotiBox ? <Input readOnly value="Box" /> : <Select value={productDraft.salesUnit ?? ""} disabled={!finishedProduction} onChange={(event) => setProductDraft((current) => current ? { ...current, salesUnit: event.target.value, stockUnit: event.target.value } : current)}><UnitOptions /></Select>}</Field>
+                    <Field label="Berat" required={productDraft.isActive}><Input type="number" min="0" value={productDraft.weightValue ? String(productDraft.weightValue) : ""} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, weightValue: Number(data.value) || 0 } : current)} /></Field>
+                    <Field label="Satuan berat" required={productDraft.isActive}><Select value={productDraft.weightUnit ?? ""} disabled={!finishedProduction} onChange={(event) => setProductDraft((current) => current ? { ...current, weightUnit: event.target.value } : current)}><UnitOptions families={["Berat"]} /></Select></Field>
                   </div>
+                  {isDraftRotiBox ? <Field label="Jumlah roti per box (opsional)" hint="Boleh kosong sampai jumlah isi diketahui; stok dan penjualan tetap dihitung dalam Box."><Input type="number" min="1" step="1" value={productDraft.contentQuantity ? String(productDraft.contentQuantity) : ""} disabled={!finishedProduction} contentAfter="Roti / Box" onChange={(_, data) => setProductDraft((current) => current ? { ...current, contentQuantity: data.value ? Number(data.value) : undefined, contentUnit: data.value ? "Roti" : undefined } : current)} /></Field> : null}
+                  <Field label="Deskripsi kemasan"><Textarea value={productDraft.packagingDescription ?? ""} disabled={!finishedProduction} resize="vertical" onChange={(_, data) => setProductDraft((current) => current ? { ...current, packagingDescription: data.value } : current)} /></Field>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Umur simpan"><Input type="number" min="0" value={String(productDraft.shelfLifeDays)} disabled={!finishedProduction} contentAfter="hari" onChange={(_, data) => setProductDraft((current) => current ? { ...current, shelfLifeDays: Number(data.value) || 0 } : current)} /></Field>
                     <Field label="Stok minimum"><Input type="number" min="0" value={String(productDraft.minStock)} disabled={!finishedStock} contentAfter={productDraft.stockUnit} onChange={(_, data) => setProductDraft((current) => current ? { ...current, minStock: Number(data.value) || 0 } : current)} /></Field>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Harga Agen 1" required><Input type="number" min="0" value={String(productDraft.agent1Price)} disabled={!finishedPrice} onChange={(_, data) => setProductDraft((current) => current ? { ...current, agent1Price: Number(data.value) || 0 } : current)} /></Field>
-                    <Field label="Harga Agen 2" required><Input type="number" min="0" value={String(productDraft.agent2Price)} disabled={!finishedPrice} onChange={(_, data) => setProductDraft((current) => current ? { ...current, agent2Price: Number(data.value) || 0 } : current)} /></Field>
+                    <Field label="Harga Agen 1" required={productDraft.isActive}><Input type="number" min="0" value={String(productDraft.agent1Price)} disabled={!finishedPrice} contentAfter={`/${productDraft.salesUnit || "satuan"}`} onChange={(_, data) => setProductDraft((current) => current ? { ...current, agent1Price: Number(data.value) || 0 } : current)} /></Field>
+                    <Field label="Harga Agen 2" required={productDraft.isActive}><Input type="number" min="0" value={String(productDraft.agent2Price)} disabled={!finishedPrice} contentAfter={`/${productDraft.salesUnit || "satuan"}`} onChange={(_, data) => setProductDraft((current) => current ? { ...current, agent2Price: Number(data.value) || 0 } : current)} /></Field>
                   </div>
+                  <Field label="HPP per satuan stok" required={productDraft.isActive} hint="Dipakai untuk menghitung nilai Gudang Produk Jadi dan laba kotor."><Input type="number" min="0" value={String(productDraft.cost)} disabled={!finishedCost} contentAfter={`/${productDraft.stockUnit || "satuan"}`} onChange={(_, data) => setProductDraft((current) => current ? { ...current, cost: Number(data.value) || 0 } : current)} /></Field>
                   <Field label="Catatan"><Textarea value={productDraft.notes} disabled={!finishedProduction} resize="vertical" onChange={(_, data) => setProductDraft((current) => current ? { ...current, notes: data.value } : current)} /></Field>
-                  <div className="flex flex-wrap gap-5"><Checkbox checked disabled label="QC akhir wajib" /><Checkbox checked={productDraft.isActive} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, isActive: Boolean(data.checked) } : current)} label="Status aktif" /></div>
+                  <Checkbox checked={productDraft.isActive} disabled={!finishedProduction} onChange={(_, data) => setProductDraft((current) => current ? { ...current, isActive: Boolean(data.checked) } : current)} label="Status aktif" />
                 </>
               ) : productDraft ? (
                 <>
-                  <PermissionNote>Purchasing mengisi satuan beli serta isi setiap kemasan. Gudang memilih satuan stok. Sistem menghitung nilai konversi akhir secara otomatis; QC mengelola persyaratan pemeriksaan.</PermissionNote>
+                  <PermissionNote>Purchasing mengisi satuan beli serta isi setiap kemasan. Gudang memilih satuan stok dan mengisi stok minimum dalam Satuan Isi; sistem menampilkan hasil konversinya ke Satuan Stok.</PermissionNote>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Kode barang" required><Input value={productDraft.code} disabled={!materialPurchase} onChange={(_, data) => setProductDraft((current) => current ? { ...current, code: data.value } : current)} /></Field>
-                    <Field label="Jenis" required><Select value={productDraft.type} disabled={!materialPurchase} onChange={(event) => setProductDraft((current) => current ? { ...current, type: event.target.value as Product["type"] } : current)}><option>Bahan Baku</option><option>Kemasan</option></Select></Field>
+                    <Field label="Jenis" required><Select value={productDraft.type} disabled={!materialPurchase} onChange={(event) => setProductDraft((current) => current ? { ...current, type: event.target.value as Product["type"] } : current)}><option>Bahan Baku</option><option>Bahan Baku Toping</option><option>Kemasan</option></Select></Field>
                   </div>
                   <Field label="Nama barang" required><Input value={productDraft.name} disabled={!materialPurchase} onChange={(_, data) => setProductDraft((current) => current ? { ...current, name: data.value } : current)} /></Field>
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -435,11 +519,15 @@ export default function MasterDataPage() {
                     <Field label={`Biaya per ${productDraft.stockUnit || "satuan stok"}`}><Input readOnly value={formatCurrency(materialAutomaticConversion && materialAutomaticConversion > 0 ? productDraft.purchasePrice / materialAutomaticConversion : 0)} /></Field>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Stok minimum"><Input type="number" min="0" value={String(productDraft.minStock)} disabled={!materialStock} contentAfter={productDraft.stockUnit} onChange={(_, data) => setProductDraft((current) => current ? { ...current, minStock: Number(data.value) || 0 } : current)} /></Field>
+                    <Field label="Stok minimum dalam Satuan Isi" hint={`Masukkan dalam ${productDraft.purchaseContentUnit || "Satuan Isi"}; sistem menyimpan saldo batas minimum dalam ${productDraft.stockUnit || "Satuan Stok"}.`}><Input type="number" min="0" step="any" value={String(productDraft.minStockInputValue ?? 0)} disabled={!materialStock} contentAfter={productDraft.purchaseContentUnit || "Satuan Isi"} onChange={(_, data) => setProductDraft((current) => current ? { ...current, minStockInputValue: Number(data.value) || 0, minStockInputUnit: current.purchaseContentUnit } : current)} /></Field>
                     <Field label="Umur simpan"><Input type="number" min="0" value={String(productDraft.shelfLifeDays)} disabled={!materialStock} contentAfter="hari" onChange={(_, data) => setProductDraft((current) => current ? { ...current, shelfLifeDays: Number(data.value) || 0 } : current)} /></Field>
                   </div>
+                  <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-2)] p-3 text-sm">
+                    <p className="text-xs text-[var(--app-text-muted)]">Hasil konversi stok minimum</p>
+                    <p className="tabular mt-1 font-semibold">{formatNumber(productDraft.minStockInputValue ?? 0)} {productDraft.purchaseContentUnit || "Satuan Isi"} = {materialMinimumInStockUnit === null ? "konversi belum valid" : `${formatNumber(materialMinimumInStockUnit, 6)} ${productDraft.stockUnit}`}</p>
+                  </div>
                   <Field label="Catatan"><Textarea value={productDraft.notes} disabled={!materialPurchase} resize="vertical" onChange={(_, data) => setProductDraft((current) => current ? { ...current, notes: data.value } : current)} /></Field>
-                  <div className="flex flex-wrap gap-5"><Checkbox checked={productDraft.requiresQc} disabled={!materialQuality} onChange={(_, data) => setProductDraft((current) => current ? { ...current, requiresQc: Boolean(data.checked) } : current)} label="Wajib QC" /><Checkbox checked={productDraft.isActive} disabled={!materialStock} onChange={(_, data) => setProductDraft((current) => current ? { ...current, isActive: Boolean(data.checked) } : current)} label="Status aktif" /></div>
+                  <Checkbox checked={productDraft.isActive} disabled={!materialStock} onChange={(_, data) => setProductDraft((current) => current ? { ...current, isActive: Boolean(data.checked) } : current)} label="Status aktif" />
                 </>
               ) : null}
             </DialogContent>

@@ -7,12 +7,35 @@
 | Produk | ERP Pabrik Roti Hanan |
 | Pemilik bisnis | Bapak Asep |
 | Lokasi utama | Bandung |
-| Versi dokumen | 1.3 |
-| Status | Draft diperbarui — konversi satuan otomatis telah dirinci |
-| Tanggal | 25 Agustus 2026 |
+| Versi dokumen | 2.0 |
+| Status | Revisi operasional final — siap implementasi frontend |
+| Tanggal | 1 September 2026 |
 | Platform | Web responsif untuk mobile, tablet, laptop, dan PC |
 | Frontend | Next.js |
 | Backend, database, dan deployment | InsForge |
+
+---
+
+## 0. Revisi Operasional Final
+
+Bagian ini adalah spesifikasi yang berlaku per 1 September 2026. Apabila ada isi lama pada bagian berikutnya yang menyebut resep produksi, QC, karantina, rework, persetujuan Owner, atau gudang tunggal, isi tersebut dinyatakan tidak berlaku dan digantikan oleh keputusan berikut.
+
+1. Master Barang/Bahan hanya memiliki klasifikasi **Bahan Baku**, **Bahan Baku Toping**, dan **Kemasan**. Alat perlengkapan tidak menjadi klasifikasi tersendiri.
+2. Stok minimum Barang/Bahan selalu dimasukkan dalam **Satuan Isi** dan hasil konversi ke **Satuan Stok** ditampilkan otomatis. Contoh `10 Kg` menjadi `10.000 Gram`.
+3. Master Resep Produksi dihapus. Kebutuhan bahan tidak dihitung dari kekurangan pesanan atau formula sistem.
+4. Master Barang Jadi memiliki input **HPP per satuan stok**. Nilai Gudang Produk Jadi dihitung `stok × HPP master`.
+5. Inventori dipisahkan menjadi **Gudang Bahan** dan **Gudang Produk Jadi**. Data tetap terpusat, tetapi saldo, transaksi, dashboard, dan akses konteks gudangnya dipisahkan. Petugas keduanya memakai role **Staff Gudang** yang sama.
+6. Gudang Bahan menyimpan Bahan Baku, Bahan Baku Toping, dan Kemasan. Pembelian supplier masuk ke gudang ini. Permintaan bahan Produksi mengurangi gudang ini setelah diserahkan dan dikonfirmasi diterima.
+7. Staff Produksi membuat batch dan memilih sendiri bahan, kemasan, serta jumlah yang dibutuhkan. Batch tidak dibuat dengan target kuantitas berdasarkan kekurangan pesanan agen.
+8. Satu batch dapat menghasilkan satu atau beberapa SKU Barang Jadi. Saat menyelesaikan batch, Produksi langsung memasukkan kuantitas berhasil dan gagal per SKU. Hasil berhasil masuk Gudang Produk Jadi; hasil gagal dicatat sebagai waste beserta alasan dan tidak masuk stok mana pun.
+9. Modul dan role QC dihapus. Field Wajib QC, pemeriksaan bahan masuk, status Karantina, Ditahan, Rework, dan seluruh validasi lanjutan QC juga dihapus.
+10. Pesanan agen mereservasi stok saat dicatat agar stok yang sama tidak dijanjikan ke beberapa pesanan. Kekurangan tetap menjadi informasi demand bagi Produksi, bukan rumus pembuatan batch.
+11. Hasil berhasil dari batch otomatis memenuhi kekurangan pesanan terkait berdasarkan **tanggal kebutuhan paling dekat**, kemudian **pesanan yang dibuat lebih dahulu**. Hubungan pesanan–batch tetap disimpan walaupun satu batch memenuhi beberapa pesanan.
+12. Penjualan langsung/POS hanya dapat diselesaikan jika stok tersedia dan tidak boleh membuat stok minus.
+13. Seluruh workflow Persetujuan Owner dihapus. Staf yang memiliki hak dapat langsung memproses PO, biaya, koreksi stok, payroll, dan transaksi lain dengan jejak transaksi tetap tersimpan.
+14. Nilai rupiah Gudang Bahan tidak perlu ditampilkan; yang ditampilkan adalah sisa kuantitas stok. Dashboard Owner menampilkan nilai Gudang Produk Jadi, penjualan, HPP, laba kotor, laba operasional, kas, utang, dan piutang.
+15. Laporan menyediakan filter harian, mingguan, bulanan, tahunan, dan rentang tanggal khusus serta menampilkan laba kotor dan laba operasional.
+16. Modul lainnya tidak berubah kecuali penyesuaian yang diperlukan untuk mengikuti alur di atas.
 
 ---
 
@@ -38,7 +61,8 @@ Contoh keterhubungan:
 - Penjualan langsung di pusat atau pesanan agen yang telah diserahterimakan mengurangi stok pusat dan mencatat pembayaran/piutang.
 - Pesanan Agen 1/Agen 2 menjadi masukan rencana produksi dan pemenuhan pesanan.
 - Penerimaan pembelian dikonversi dari satuan beli ke satuan stok, dicatat sebagai stok fisik, lalu hanya menjadi stok siap pakai setelah lulus QC bila barang mewajibkan QC.
-- Penyelesaian produksi mengurangi bahan baku, menambah produk jadi, dan mencatat biaya serta waste.
+- Resep/BOM per SKU menghitung kebutuhan bahan baku dan kemasan sebagai formulir permintaan Produksi ke Gudang. Gudang menyetujui atau menunda permintaan; kekurangan diteruskan ke Purchasing. Stok Gudang baru berkurang setelah Produksi/QC mengonfirmasi serah-terima, dan laporan akhir mencatat hasil berhasil serta gagal/waste tanpa proses pengembalian sisa bahan.
+- Hasil produksi yang berhasil masuk stok karantina QC terlebih dahulu. Hanya kuantitas yang diluluskan QC berpindah menjadi stok produk jadi siap jual; kuantitas ditahan, rework, atau ditolak tetap dipisahkan dan terlacak.
 - Kehadiran dan lembur menjadi dasar payroll dan biaya tenaga kerja.
 - Seluruh transaksi memperbarui dashboard Bapak Asep.
 
@@ -73,6 +97,8 @@ Target berikut merupakan target awal dan dapat disesuaikan setelah tersedia data
 | Batch produk jadi dapat ditelusuri ke bahan, pesanan, dan agen penerima | Maksimal 5 menit |
 | Penerimaan bahan memiliki hasil QC | 100% untuk bahan yang wajib QC |
 | Produksi memiliki catatan target, hasil baik, dan waste | 100% batch |
+| Pemakaian bahan dapat ditelusuri dari resep ke lot dan batch produksi | 100% batch selesai |
+| Hasil berhasil produksi memiliki disposisi kuantitas QC | 100% sebelum batch ditutup |
 | Selisih kas memiliki alasan dan penyelesaian | 100% |
 | Persetujuan penting memiliki riwayat | 100% |
 | Dashboard harian tersedia untuk Owner | Setiap hari operasional |
@@ -83,15 +109,17 @@ Target berikut merupakan target awal dan dapat disesuaikan setelah tersedia data
 
 - Satu badan usaha Roti Hanan.
 - Satu pusat/pabrik Roti Hanan di Bandung tanpa cabang.
-- Area gudang internal untuk bahan baku, kemasan, karantina, produk jadi, barang ditolak, dan barang dalam pengiriman.
+- Area gudang internal untuk bahan baku, kemasan, staging/produksi, karantina QC, produk jadi, barang ditolak, dan barang dalam pengiriman.
 - Penjualan B2B kepada Agen 1 dan Agen 2 melalui POS pusat, pesanan, penawaran, pembayaran, retur, pengambilan, pengiriman, dan tutup shift POS.
 - Master pelanggan yang tetap dipisahkan dalam kategori Agen 1 dan Agen 2, lengkap dengan kontak, alamat, termin, batas kredit, catatan, dan status aktif.
 - Master supplier berkode unik, lengkap dengan kontak, alamat, termin, catatan, dan status aktif.
 - Master Barang/Bahan yang hanya terdiri dari Bahan Baku dan Kemasan, serta Master Barang Jadi yang terpisah secara bisnis dan tampilan.
+- Hierarki Master Barang Jadi yang dapat dikelola tanpa perubahan kode: kategori roti, tipe di bawah kategori, varian di bawah tipe, dan SKU akhir. Kategori awal adalah **Roti Black Forest** dan **Roti Box**; hanya Roti Box yang saat ini mempunyai tipe **Reguler**, **Mix**, **Ekonomis**, dan **Mini**.
 - Dua harga jual yang wajib tersedia untuk setiap Barang Jadi: Harga Agen 1 dan Harga Agen 2. Tidak ada harga jual umum.
 - Menu Master Data tersedia pada setiap role dengan isi dan hak edit sesuai bagian yang menjadi tanggung jawab role tersebut.
 - Pemenuhan pesanan agen dari alokasi stok atau kebutuhan produksi sampai bukti serah terima.
-- Bahan, resep, rencana produksi, batch produksi, hasil, waste, dan QC.
+- Master Data Resep/BOM per SKU dan versi, beserta bahan baku, bahan kemasan, output standar, toleransi, status review/approval, dan tanggal efektif.
+- Rencana produksi, pemilihan resep aktif, permintaan bahan bersatuan ke Gudang, keputusan/penundaan Gudang, eskalasi kekurangan ke Purchasing, konfirmasi serah-terima Produksi/QC, batch produksi, hasil berhasil/gagal, waste, dan disposisi kuantitas QC.
 - Permintaan pembelian, perbandingan penawaran supplier, pesanan pembelian, penerimaan, retur, dan evaluasi supplier.
 - Kas, bank, biaya, piutang, utang, jurnal akuntansi, harga pokok, anggaran, dan laporan keuangan dasar.
 - Data karyawan, jadwal, kehadiran, lembur, cuti, payroll, dan slip gaji.
@@ -119,6 +147,14 @@ Target berikut merupakan target awal dan dapat disesuaikan setelah tersedia data
 - Data master bersifat bersama. Role tidak memiliki salinan master sendiri, tetapi mendapat hak lihat/ubah sampai tingkat bagian atau field sesuai tanggung jawabnya.
 - Satuan beli Barang/Bahan dapat berbeda dari satuan isi dan satuan stok. Isi kemasan dimasukkan manual, sedangkan faktor antar-satuan sekelompok dihitung otomatis. Kuantitas stok masuk dihitung dengan rumus `jumlah beli × isi per satuan beli × faktor otomatis satuan isi ke satuan stok`.
 - Jenis pada Master Barang/Bahan hanya **Bahan Baku** dan **Kemasan**. Barang Jadi dikelola pada master terpisah.
+- Inventori dan Gudang menjadi sumber kebenaran saldo untuk Bahan Baku, Kemasan, serta Barang Jadi. Stok tidak disimpan ulang sebagai angka terpisah di modul Produksi atau QC.
+- Resep/BOM merupakan **Master Data Resep Produksi** yang terpisah dari transaksi Produksi dan QC. Setiap resep melekat pada tepat satu SKU Barang Jadi, dibuat oleh role berwenang, ditinjau/disetujui sesuai workflow, memiliki output standar serta versi efektif, dan setiap batch menyimpan snapshot versi yang digunakannya.
+- Staff Produksi wajib memasukkan jumlah **berhasil** dan **gagal/waste** saat menyelesaikan batch. Angka tersebut merupakan realisasi produksi, sedangkan keputusan **lulus, ditahan, rework, atau ditolak** beserta kuantitasnya merupakan tanggung jawab QC.
+- Hasil yang dilaporkan berhasil belum menjadi stok siap jual. Sistem mencatatnya sebagai stok fisik di karantina QC sampai QC memberikan disposisi akhir.
+- Klasifikasi Barang Jadi menggunakan hierarki **Kategori → Tipe → Varian**. Tipe selalu menjadi anak dari satu kategori dan varian selalu menjadi anak dari satu tipe. Setiap kombinasi akhir yang dapat diproduksi, disimpan, diberi harga, dan dijual merupakan satu SKU Barang Jadi tersendiri.
+- **Roti Black Forest** adalah kategori yang saat ini langsung menghasilkan satu produk tanpa tipe atau varian turunan. **Roti Box** adalah kategori yang mempunyai tipe Reguler, Mix, Ekonomis, dan Mini. Mini mempunyai nama-nama varian awal yang sama dengan Reguler, tetapi varian tersebut tetap berada di bawah tipe Mini dan setiap hasil akhirnya mempunyai SKU serta komponen kemasan tersendiri.
+- Daftar kategori, tipe, dan varian dapat ditambah, diubah, diurutkan, dan dinonaktifkan oleh role berwenang melalui Master Data. Nilai yang telah dipakai SKU atau transaksi tidak dihapus permanen dan hanya dapat dinonaktifkan.
+- Seluruh produk dalam kategori **Roti Box** dihitung, disimpan, diberi harga, dan dijual dalam satuan **Box**. Jumlah roti di dalam satu box belum diketahui, sehingga `jumlah isi per box` disediakan sebagai field opsional yang dapat dilengkapi kemudian dan tidak menghalangi aktivasi SKU. Satuan Roti Black Forest belum dikonfirmasi dan tidak boleh ditebak.
 - Aplikasi tidak menggunakan barcode produk pada rilis awal; pencarian memakai kode dan nama.
 - Pesanan diterima melalui WhatsApp, telepon, atau kedatangan langsung, kemudian dimasukkan oleh Admin Penjualan/Sales.
 - Penjualan langsung melalui POS pusat tetap tersedia.
@@ -140,9 +176,9 @@ Target berikut merupakan target awal dan dapat disesuaikan setelah tersedia data
 |---|---|---|---|
 | Owner — Bapak Asep | Seluruh perusahaan | Melihat semua dashboard/laporan, mengelola seluruh Master Data, memberi persetujuan, mengatur kebijakan, melihat audit | Perubahan transaksi tetap harus melalui koreksi resmi dan tercatat |
 | Admin Penjualan/Sales | Seluruh proses penjualan B2B di pusat | POS, penawaran, pesanan Agen 1/Agen 2, pembayaran, pengambilan/pengiriman, retur sesuai batas, shift POS, identitas agen, dan harga jual kategori | Tidak melihat resep, payroll, biaya produk lengkap, atau mengubah batas kredit tanpa hak Finance |
-| Staff Gudang | Seluruh area gudang internal sesuai pekerjaannya | Penerimaan, perpindahan, pengeluaran, stok opname, picking, packing, serta parameter stok dan satuan stok pada master | Tidak mengubah harga beli/jual, hasil QC, jurnal, atau menyetujui koreksi stok besar |
-| Staff Produksi | Pusat Bandung | Rencana, pemakaian bahan, proses, hasil, waste, kendala, Master Barang Jadi bagian produksi, dan resep | Tidak meluluskan QC atau mengubah harga jual/transaksi keuangan |
-| QC Inspector | Pusat Bandung dan seluruh area pemeriksaan | Memeriksa, menahan, meluluskan, menolak, mengelola template/persyaratan QC, mencatat penyimpangan dan tindakan | Tidak mengubah hasil produksi, jumlah stok, harga, atau pembayaran |
+| Staff Gudang | Seluruh area gudang internal sesuai pekerjaannya | Penerimaan, pemeriksaan permintaan bahan Produksi, konfirmasi/tunda dengan batas waktu, penyiapan lot/FEFO, penerusan kekurangan ke Purchasing, perpindahan status/area berdasarkan dokumen, stok opname, picking, packing, serta parameter stok dan satuan stok pada master | Tidak mengubah resep, hasil produksi, keputusan QC, harga, jurnal, atau menyetujui koreksi stok besar |
+| Staff Produksi | Pusat Bandung | Rencana, membuat dan mengajukan Master Data Resep/BOM per SKU, membuat permintaan bahan, mengonfirmasi serah-terima yang disetujui Gudang, menjalankan proses, input hasil berhasil dan gagal/waste, kendala, serta Master Barang Jadi bagian produksi | Tidak mengaktifkan resep tanpa workflow yang diwajibkan, meluluskan QC, mengubah disposisi QC, harga jual, atau transaksi keuangan |
+| QC Inspector | Pusat Bandung dan seluruh area pemeriksaan | Meninjau Master Data Resep sesuai hak review/approval, memeriksa bahan/proses/produk jadi, mengelola template/persyaratan QC, menetapkan kuantitas lulus/ditahan/rework/ditolak, serta mencatat penyimpangan dan tindakan | Tidak mengubah formula resep sebagai pembuat, angka berhasil/gagal yang dilaporkan Produksi, pemakaian bahan, harga, atau pembayaran |
 | Staff Purchasing | Seluruh kebutuhan pembelian | Master Supplier, Master Barang/Bahan bagian pembelian, permintaan/penawaran, PO, dan pemantauan pengiriman | Tidak membayar supplier atau menyetujui pembeliannya sendiri di atas batas |
 | Admin HR/Finance | Seluruh perusahaan sesuai fungsi | Karyawan/user, termin dan batas kredit pelanggan, termin supplier, kas, bank, biaya, utang, piutang, jurnal, laporan, dan payroll | Tidak mengubah hasil produksi, keputusan QC, atau stok tanpa proses koreksi |
 
@@ -161,13 +197,14 @@ Setiap role mempunyai menu **Master Data**, tetapi menu, tab, tombol, dan field 
 | Barang/Bahan — identitas, jenis Bahan Baku/Kemasan, satuan beli, isi per satuan beli, satuan isi, dan harga beli | Staff Purchasing, Owner | Gudang dan Produksi dapat melihat; nilai konversi akhir dihitung otomatis setelah satuan stok ditentukan |
 | Barang/Bahan — satuan stok, stok minimum, umur simpan, dan status | Staff Gudang, Owner | Purchasing, Produksi, dan QC dapat melihat |
 | Barang/Bahan — wajib QC dan template pemeriksaan | QC Inspector, Owner | Gudang/Purchasing dapat melihat status dan hasil, tetapi tidak menentukan keputusan QC |
-| Barang Jadi — kode, nama, jenis produk, satuan jual/stok, berat, umur simpan, dan status | Staff Produksi, Owner | Sales, Gudang, dan QC dapat melihat |
+| Klasifikasi Barang Jadi — kategori, tipe per kategori, varian per tipe, urutan, dan status | Staff Produksi, Owner | Sales, Gudang, QC, dan Finance dapat melihat; perubahan yang pernah dipakai hanya dapat dinonaktifkan |
+| Barang Jadi/SKU — kode, nama, kategori, tipe, varian, spesifikasi kemasan, satuan jual/stok, isi per kemasan, berat, umur simpan, dan status | Staff Produksi, Owner | Sales, Gudang, dan QC dapat melihat |
 | Barang Jadi — stok minimum | Staff Gudang, Owner | Produksi dan Sales dapat melihat |
 | Barang Jadi — QC akhir dan template pemeriksaan | QC Inspector, Owner | Produksi/Gudang dapat melihat; seluruh Barang Jadi wajib lulus QC sebelum siap jual |
-| Resep dan proses standar | Staff Produksi, Owner; review QC sesuai kebijakan | Sales/Purchasing tidak dapat melihat formula sensitif |
+| Resep Produksi/BOM dan proses standar — menu tersendiri pada **Master Data → Resep Produksi** | Staff Produksi membuat/merevisi; QC melakukan review/approval sesuai kebijakan; Owner berwenang penuh | Produksi menggunakan resep aktif tanpa mengubah formula dari transaksi batch; Gudang hanya melihat kebutuhan bahan untuk penyiapan; Sales/Purchasing tidak dapat melihat formula sensitif |
 | Karyawan, user, dan komponen payroll | Admin HR/Finance, Owner | Role lain tidak dapat melihat data gaji sensitif |
 
-Perubahan kategori agen, satuan, konversi, harga, termin, batas kredit, persyaratan QC, dan status aktif wajib masuk audit log. Record master yang pernah dipakai transaksi tidak dapat dihapus permanen dan hanya dapat dinonaktifkan.
+Perubahan kategori agen, kategori/tipe/varian Barang Jadi, formula/versi/status resep, satuan, isi/komponen kemasan, konversi, harga, termin, batas kredit, persyaratan QC, dan status aktif wajib masuk audit log. Record master yang pernah dipakai transaksi tidak dapat dihapus permanen dan hanya dapat dinonaktifkan.
 
 #### Model akun, role, dan password
 
@@ -211,6 +248,12 @@ Perubahan kategori agen, satuan, konversi, harga, termin, batas kredit, persyara
 | FR-022 | Sistem mendukung hak edit sampai tingkat bagian/field sehingga beberapa role dapat mengelola bagian berbeda dari satu record tanpa membuat duplikasi | Must |
 | FR-023 | Master Barang/Bahan dan Master Barang Jadi disajikan sebagai menu, form, dan model bisnis terpisah | Must |
 | FR-024 | Data master yang telah digunakan transaksi hanya dapat dinonaktifkan, bukan dihapus permanen | Must |
+| FR-025 | Master Barang Jadi menyediakan pengelolaan kategori, tipe di bawah kategori, dan varian di bawah tipe tanpa memerlukan perubahan kode atau deployment aplikasi | Must |
+| FR-026 | Form Barang Jadi menggunakan pilihan bertingkat Kategori → Tipe → Varian, hanya menampilkan data anak dari pilihan sebelumnya, serta menyimpan setiap kombinasi akhir sebagai SKU berkode unik | Must |
+| FR-027 | Daftar, pencarian, filter, ekspor, dan analitik Barang Jadi dapat menggunakan kategori, tipe, varian, dan SKU | Must |
+| FR-028 | Master Data menyediakan menu Resep Produksi per SKU yang hanya dapat diubah role berwenang, berversi, serta menyimpan pelaku, waktu, status review/approval, dan tanggal efektif | Must |
+| FR-029 | Finalisasi produksi otomatis mengonsumsi seluruh bahan yang telah diserahterimakan, mencatat waste, hasil berhasil/gagal, stok karantina QC, dan jejak biaya sebagai satu transaksi atomik/idempotent; tidak ada input atau pengembalian sisa bahan | Must |
+| FR-030 | Modul Produksi hanya dapat memilih resep berstatus aktif yang berlaku untuk SKU batch; formula dan langkahnya dibaca dari Master Data serta disimpan sebagai snapshot batch tanpa dapat diedit dari transaksi Produksi | Must |
 
 ### 2.3 Aturan bisnis utama
 
@@ -229,7 +272,7 @@ Perubahan kategori agen, satuan, konversi, harga, termin, batas kredit, persyara
 13. Pesanan agen hanya dapat dimasukkan oleh Admin Penjualan/Sales internal; agen tidak memiliki akun aplikasi pada rilis awal.
 14. Aktivitas yang berdampak keuangan menghasilkan catatan jurnal hanya setelah transaksi dikonfirmasi sesuai titik pengakuannya.
 15. Jurnal, pergerakan stok, dan audit log bersifat append-only; perbaikan dilakukan dengan entri pembalik/koreksi.
-16. Perubahan resep menghasilkan versi baru, bukan menimpa resep yang sudah digunakan batch lama.
+16. Perubahan Master Data Resep menghasilkan versi baru, bukan menimpa resep yang sudah digunakan batch lama. Hanya satu versi aktif pada suatu waktu untuk kombinasi SKU dan rentang efektif yang sama.
 17. Perubahan rekening supplier dan data gaji adalah data sensitif yang membutuhkan akses khusus.
 18. Semua saldo inventori disimpan dalam satuan stok barang. Input pembelian memakai satuan beli; isi kemasan, satuan isi, dan hasil konversi otomatis ke satuan stok disimpan sebagai snapshot transaksi.
 19. Master Barang/Bahan hanya memiliki jenis **Bahan Baku** atau **Kemasan**. Barang Jadi adalah master terpisah dan merupakan hasil produksi yang dapat dijual.
@@ -238,13 +281,31 @@ Perubahan kategori agen, satuan, konversi, harga, termin, batas kredit, persyara
 22. Konversi otomatis hanya diperbolehkan dalam kelompok yang sama: Berat (`Ton`, `Kg`, `Gram`, `Mg`), Volume (`Liter`, `Ml`), atau Jumlah (`Pcs`, `Lusin`, `Kodi`, `Gross`). Konversi beda kelompok seperti Kg ke Liter atau Liter ke Pcs ditolak. `Karung`, `Sak`, `Pack`, `Dus`, `Karton`, `Botol`, `Kaleng`, dan `Roll` diperlakukan sebagai kemasan dengan isi yang harus dimasukkan manual.
 23. Jumlah PO dan harga beli dimasukkan dalam satuan beli, sedangkan saldo, stok minimum, pemakaian resep, reservasi, dan pergerakan inventori disimpan dalam satuan stok.
 24. Satuan stok Barang Jadi sama dengan satuan jual. Berat disimpan sebagai nilai dan satuan berat terpisah dari kuantitas stok.
-25. Master pelanggan selalu disajikan dalam dua bagian, Agen 1 dan Agen 2. Pelanggan nonaktif tidak dapat dipilih pada transaksi baru.
-26. Tempo pembayaran pelanggan dan supplier disimpan sebagai jumlah hari; nilai `0` berarti tunai. Batas Kredit adalah nilai maksimum total hutang/piutang terbuka pelanggan kepada Roti Hanan.
-27. Transaksi kredit yang melampaui sisa batas kredit ditolak atau masuk persetujuan Owner sesuai aturan yang dikonfigurasi.
-28. Barang wajib QC yang diterima dicatat sebagai stok fisik berstatus karantina; kuantitas tersebut tidak termasuk stok tersedia sebelum lulus. Pemeriksaan dasar gudang tetap wajib untuk barang yang tidak mewajibkan QC.
-29. Seluruh Barang Jadi hasil produksi wajib menjalani QC akhir dan belum menjadi stok siap jual sebelum keputusan lulus.
-30. Keputusan QC bahan masuk adalah lulus, ditahan, atau ditolak; QC produk jadi juga dapat menghasilkan rework. Hanya QC Inspector/Owner berwenang yang dapat menetapkan keputusan.
-31. Perubahan kategori agen, harga, tempo, batas kredit, satuan, isi kemasan, konversi, persyaratan QC, dan status aktif menyimpan nilai lama, nilai baru, pelaku, waktu, dan alasan.
+25. Klasifikasi Barang Jadi menggunakan hierarki **Kategori → Tipe → Varian**. Setiap tipe hanya berada di bawah satu kategori dan setiap varian hanya berada di bawah satu tipe. Tipe dan varian boleh kosong untuk kategori yang saat ini langsung menjadi produk, seperti Roti Black Forest.
+26. Setiap kombinasi akhir kategori, tipe, dan varian yang dapat dijual menjadi SKU Barang Jadi berkode unik. Harga, stok, produksi, resep, QC, dan histori transaksi selalu mengacu kepada SKU, bukan hanya nama kategori atau varian.
+27. Roti Box Reguler dan Mini mempunyai daftar nama varian awal yang sama, tetapi record varian tetap berada di bawah tipenya masing-masing agar dapat diedit secara independen. Setiap hasil Reguler dan Mini merupakan SKU berbeda dan, berdasarkan keputusan bisnis saat ini, hanya berbeda pada kemasan; komponen kemasan pada resep/BOM masing-masing SKU harus dapat dibedakan.
+28. Roti Box Mix memiliki varian langsung `3D`, `Asin`, `Manis`, `Asin Manis`, `Sweet`, dan `Sweet G`. `3D` adalah kombinasi cokelat, keju, dan kacang yang melimpah pada bagian luar dan dalam roti.
+29. Roti Black Forest merupakan satu produk mandiri tanpa tipe atau varian turunan pada struktur awal.
+30. Daftar kategori, tipe, dan varian dapat ditambah, diubah, diurutkan, dan dinonaktifkan oleh role berwenang. Kategori, tipe, atau varian yang sudah digunakan SKU/transaksi tidak boleh dihapus permanen.
+31. Seluruh SKU Roti Box memakai satuan jual dan satuan stok `Box`. Jumlah roti di dalam box belum diketahui, sehingga nilai jumlah isi boleh kosong dan dapat diperbarui kemudian tanpa mengubah satuan stok atau histori transaksi.
+32. Master pelanggan selalu disajikan dalam dua bagian, Agen 1 dan Agen 2. Pelanggan nonaktif tidak dapat dipilih pada transaksi baru.
+33. Tempo pembayaran pelanggan dan supplier disimpan sebagai jumlah hari; nilai `0` berarti tunai. Batas Kredit adalah nilai maksimum total hutang/piutang terbuka pelanggan kepada Roti Hanan.
+34. Transaksi kredit yang melampaui sisa batas kredit ditolak atau masuk persetujuan Owner sesuai aturan yang dikonfigurasi.
+35. Barang wajib QC yang diterima dicatat sebagai stok fisik berstatus karantina; kuantitas tersebut tidak termasuk stok tersedia sebelum lulus. Pemeriksaan dasar gudang tetap wajib untuk barang yang tidak mewajibkan QC.
+36. Seluruh Barang Jadi hasil produksi wajib menjalani QC akhir dan belum menjadi stok siap jual sebelum keputusan lulus.
+37. Keputusan QC bahan masuk adalah lulus, ditahan, atau ditolak; QC produk jadi juga dapat menghasilkan rework. Hanya QC Inspector/Owner berwenang yang dapat menetapkan keputusan.
+38. Perubahan kategori agen, klasifikasi Barang Jadi, formula/versi/status resep, harga, tempo, batas kredit, satuan, isi kemasan, konversi, persyaratan QC, dan status aktif menyimpan nilai lama, nilai baru, pelaku, waktu, dan alasan.
+39. Inventori/Gudang menyimpan saldo Bahan Baku, Kemasan, dan Barang Jadi pada ledger yang sama. Modul Produksi dan QC hanya membuat atau merujuk transaksi inventori; keduanya tidak memiliki saldo stok mandiri.
+40. Setiap resep/BOM berlaku untuk tepat satu SKU Barang Jadi dan berisi output standar, Bahan Baku, Kemasan, kuantitas dalam satuan stok, serta toleransi. Waktu standar, suhu standar, dan langkah proses tidak menjadi bagian Master Resep. Resep dikelola melalui **Master Data → Resep Produksi** oleh role berwenang; Produksi hanya memakai versi aktif dan QC melakukan review/approval sesuai haknya.
+41. Kebutuhan standar setiap bahan dihitung proporsional dengan rumus `target produksi ÷ output standar resep × kuantitas komponen resep`, kemudian dibulatkan mengikuti presisi satuan stok. Nilai rencana dan versi resep disimpan sebagai snapshot batch.
+42. Pembuatan perintah produksi membentuk formulir permintaan bahan bersatuan kepada Gudang tanpa mengurangi `available` maupun `on_hand`. Gudang memeriksa stok lulus QC per lot/FEFO lalu menyetujui atau menunda permintaan. Penundaan memiliki hitung mundur dan permintaan hilang dari antrean aktif ketika batas waktunya berakhir, tetapi riwayatnya tetap tersimpan.
+43. Jika stok tidak cukup, Gudang wajib membentuk permintaan pembelian yang terlihat oleh Staff Purchasing. Jika stok cukup dan disetujui Gudang, Produksi atau QC mengonfirmasi serah-terima; hanya konfirmasi ini yang mengurangi stok Gudang dan memindahkan kuantitas per lot ke staging Produksi.
+44. Finalisasi produksi hanya dapat dilakukan setelah serah-terima bahan dikonfirmasi dan Staff Produksi mengisi jumlah berhasil, jumlah gagal/waste, alasan kegagalan bila ada, serta catatan proses. Seluruh bahan yang telah diserahterimakan dianggap digunakan untuk batch; tidak ada input sisa dan tidak ada pengembalian sisa ke Gudang. Nilai berhasil dan gagal berasal dari input Produksi dan tidak boleh dihitung dari target atau diubah oleh QC.
+45. Jumlah berhasil dicatat sebagai output lot Barang Jadi berstatus karantina QC dengan `on_hand` bertambah dan `available = 0`. Jumlah gagal/waste tidak menambah stok Barang Jadi siap jual dan wajib membentuk pergerakan waste beserta alasan.
+46. QC memeriksa hanya jumlah berhasil yang diserahkan Produksi, lalu membagi kuantitasnya menjadi lulus, ditahan, rework, atau ditolak. Total disposisi QC untuk pemeriksaan final harus sama dengan jumlah berhasil yang diperiksa; QC tidak dapat mengubah angka berhasil/gagal Produksi.
+47. Kuantitas lulus berpindah dari karantina QC ke area produk jadi dan menjadi `available`; ditahan tetap di karantina; rework berpindah ke area/status rework dan memerlukan tindak lanjut; ditolak berpindah ke area ditolak/waste dan tidak dapat dijual.
+48. Setiap permintaan, keputusan Gudang, perintah pembelian, serah-terima bahan, konsumsi batch, dan hasil produk menyimpan relasi ke batch produksi, versi resep, item, lot, area gudang, kuantitas, satuan stok, pelaku, dan waktu sehingga penelusuran dua arah dapat dilakukan.
+49. Koreksi hasil produksi, konsumsi bahan, atau disposisi QC setelah posting dilakukan melalui transaksi koreksi/pembalik dengan alasan dan hak persetujuan; record asal tidak ditimpa atau dihapus.
 
 ### 2.4 Kebutuhan nonfungsional
 
@@ -280,13 +341,15 @@ Keterangan prioritas:
 | FND-02 | Role tunggal | Owner/Admin menetapkan tepat satu role per user; tidak ada selector role/lokasi; pemeriksaan hak dilakukan di setiap tindakan | Owner, Admin HR/Finance | Must |
 | FND-03 | Profil pusat dan area gudang | Identitas satu pusat Bandung serta area gudang internal, tipe area, alamat, dan status aktif | Owner, Admin HR/Finance | Must |
 | FND-04 | Master Barang/Bahan | Kode, nama, jenis Bahan Baku/Kemasan, satuan beli, isi per satuan beli, satuan isi, satuan stok, konversi otomatis sekelompok, harga beli per satuan beli, stok minimum, umur simpan, wajib QC, dan status aktif; tanpa barcode | Owner, Purchasing, Gudang, QC sesuai bagian | Must |
-| FND-05 | Master Barang Jadi | Kode produk, nama, jenis produk, satuan jual yang sekaligus menjadi satuan stok, berat, umur simpan, Harga Agen 1, Harga Agen 2, stok minimum, QC akhir wajib, dan status aktif; terpisah dari Barang/Bahan | Owner, Produksi, Sales, Gudang, QC sesuai bagian | Must |
+| FND-05 | Master Barang Jadi | Satu record per SKU dengan kode unik, nama, kategori, tipe, varian, spesifikasi/komponen kemasan, satuan jual yang sekaligus menjadi satuan stok, jumlah isi opsional, berat, umur simpan, Harga Agen 1, Harga Agen 2, stok minimum, QC akhir wajib, dan status aktif; seluruh Roti Box memakai satuan Box; terpisah dari Barang/Bahan | Owner, Produksi, Sales, Gudang, QC sesuai bagian | Must |
 | FND-06 | Master Pelanggan | Dua tab tetap Agen 1/Agen 2; kode, nama pelanggan, nama kontak, nomor HP, alamat, kota, tempo pembayaran dalam hari, batas kredit, catatan, dan status aktif | Owner, Sales, Finance sesuai bagian | Must |
 | FND-07 | Master Supplier | Kode supplier unik, nama, nama kontak, nomor HP, alamat, kota, tempo pembayaran dalam hari, catatan, dan status aktif | Owner, Purchasing, Finance sesuai bagian | Must |
 | FND-08 | Master Data berbasis role | Menu Master Data pada setiap role; visibilitas menu, record, tindakan, dan field mengikuti matriks hak tanpa menggandakan record | Semua sesuai hak | Must |
 | FND-09 | Persetujuan | Batas nilai/selisih/diskon/kredit, antrean persetujuan, setuju/tolak, alasan dan waktu | Owner, role pengaju | Must |
 | FND-10 | Lampiran | Foto dan dokumen dengan akses privat; simpan URL dan storage key | Role terkait | Must |
 | FND-11 | Audit dan notifikasi | Riwayat perubahan master/transaksi, pemberitahuan dalam aplikasi, tautan ke dokumen terkait | Owner, role terkait | Must |
+| FND-12 | Klasifikasi Barang Jadi | CRUD kategori, tipe sebagai anak kategori, varian sebagai anak tipe, urutan tampil, dan status; pilihan bertingkat pada form SKU; record terpakai hanya dapat dinonaktifkan | Owner, Staff Produksi | Must |
+| FND-13 | Master Resep Produksi | CRUD resep/BOM per SKU dan versi; output standar, komponen Bahan Baku/Kemasan, kuantitas satuan stok, toleransi, status draft/review/aktif/nonaktif, tanggal efektif, audit, dan pembatasan formula sensitif | Staff Produksi membuat/merevisi; QC review/approval; Owner berwenang penuh | Must |
 
 **Kriteria penerimaan fondasi:** pengguna tidak dapat membaca atau mengubah data/field di luar role-nya dan tidak dapat memiliki lebih dari satu role aktif; setiap role melihat menu Master Data yang relevan; perubahan sensitif selalu meninggalkan audit; master yang pernah dipakai hanya dapat dinonaktifkan; lampiran privat tidak dapat dibuka tanpa izin.
 
@@ -301,9 +364,47 @@ Keterangan prioritas:
 
 Untuk Tepung BB-001, biaya dasar persediaan adalah `Rp300.000 ÷ 25 = Rp12.000/Kg`. Pada contoh BB-099, sistem mengubah `15 Kg × 1.000 = 15.000 Gram/Karung`, sehingga biaya dasarnya `Rp300.000 ÷ 15.000 = Rp20/Gram`. Nilai transaksi pembelian tetap memakai harga per satuan beli, sedangkan stok dan pemakaian produksi memakai satuan stok.
 
-#### Contoh Master Barang Jadi
+#### Struktur awal Master Barang Jadi
 
-Barang Jadi awal dapat mencakup `RJ-001 Roti Sobek Coklat`, `RJ-002 Roti Tawar`, `RJ-003 Croissant`, dan `RJ-004 Donat`. Contoh detail `RJ-001`: satuan jual/stok Pcs, berat 80 Gram, umur simpan 5 hari, stok minimum 100 Pcs, serta Harga Agen 1 dan Harga Agen 2 yang wajib diisi terpisah. Nilai berat tidak menambah stok dalam Gram; stok produk tetap dihitung dalam Pcs.
+Struktur awal klasifikasi Barang Jadi adalah:
+
+| Kategori | Tipe | Varian awal di bawah tipe |
+|---|---|---|
+| Roti Black Forest | — | —; satu produk mandiri |
+| Roti Box | Reguler | Coklat Keju, Coklat Kacang, Coklat Ceres, Bolognese, Susu Keju, Abon Ori, Abon Pedas, Abon Rendang Pedas, Tiramisu, Vanila Coklat, Oreo, Red Velvet, Durian Keju, Strawberry Keju, Blueberry Keju, Mangga Keju |
+| Roti Box | Mix | 3D, Asin, Manis, Asin Manis, Sweet, Sweet G |
+| Roti Box | Ekonomis | Salju Pink, Salju Purple, Salju Vanila, Double Pink |
+| Roti Box | Mini | Coklat Keju, Coklat Kacang, Coklat Ceres, Bolognese, Susu Keju, Abon Ori, Abon Pedas, Abon Rendang Pedas, Tiramisu, Vanila Coklat, Oreo, Red Velvet, Durian Keju, Strawberry Keju, Blueberry Keju, Mangga Keju |
+
+`3D` adalah varian Mix berupa kombinasi cokelat, keju, dan kacang yang melimpah pada bagian luar dan dalam roti. Varian Mix lainnya juga diperlakukan sebagai nama varian langsung di bawah tipe Mix, bukan sebagai tingkat kategori tambahan. Setiap record tipe menyimpan `category_id`, sedangkan setiap record varian menyimpan `type_id`; karena itu varian bernama sama pada Reguler dan Mini tetap dapat diubah secara independen.
+
+Setiap kombinasi akhir menjadi SKU tersendiri. Sebagai contoh konseptual, `Roti Box / Reguler / Coklat Keju` dan `Roti Box / Mini / Coklat Keju` mempunyai kode SKU, record varian, Harga Agen 1, Harga Agen 2, saldo stok, resep/BOM, dan histori masing-masing. Nama rasanya sama dan, berdasarkan konfirmasi saat ini, keduanya hanya berbeda pada komponen kemasan. Pola kode final belum ditetapkan dan tidak boleh diambil dari contoh konseptual ini.
+
+Seluruh SKU dalam kategori Roti Box memakai satuan jual dan satuan stok **Box**. Jumlah roti di dalam satu box belum diketahui; field jumlah isi tetap tersedia tetapi bersifat opsional dan dapat dilengkapi kemudian. Saldo stok, harga, pesanan, produksi, dan penjualan Roti Box menggunakan jumlah Box, bukan jumlah roti satuan. Berat disimpan sebagai spesifikasi nilai dan satuan berat terpisah. Satuan Roti Black Forest masih perlu dikonfirmasi.
+
+#### Hierarki Master Data Resep Produksi
+
+Resep tidak dibuat ulang di dalam setiap batch. Struktur datanya adalah:
+
+```text
+Master Data
+└── Resep Produksi
+    └── SKU Barang Jadi, misalnya Roti Black Forest
+        └── Versi resep
+            ├── Output standar
+            ├── Komponen Bahan Baku/Bahan Mentah
+            ├── Komponen Kemasan
+            ├── Toleransi pemakaian dan waste
+            └── Langkah serta parameter proses standar
+```
+
+Untuk Roti Black Forest, role pembuat memilih SKU Roti Black Forest lalu memasukkan daftar bahan yang dibutuhkan dari Master Barang/Bahan, kuantitas dalam satuan stok, output standar resep, kemasan, dan toleransi. PRD tidak mengasumsikan nama atau jumlah bahan aktual sebelum formula bisnis diberikan. Resep disimpan sebagai draft, masuk review/approval, lalu menjadi versi aktif. Modul Produksi hanya menggunakan versi aktif tersebut untuk menghitung kebutuhan batch.
+
+Status Master Resep:
+
+`draft → menunggu_review → disetujui/ditolak → aktif → nonaktif`
+
+Versi yang ditolak dapat diperbaiki selama belum aktif. Versi aktif tidak diedit langsung; tindakan revisi membuat draft versi berikutnya.
 
 ### 3.2 Penjualan dan POS
 
@@ -324,16 +425,17 @@ Barang Jadi awal dapat mencakup `RJ-001 Roti Sobek Coklat`, `RJ-002 Roti Tawar`,
 
 | ID | Fitur | Subfitur dan spesifikasi | Role | Prioritas |
 |---|---|---|---|---|
-| INV-01 | Stok per area gudang | Stok fisik, tersedia, dipesan untuk produksi/pesanan agen, karantina, dalam pengiriman, dan ditolak pada satu pusat; seluruh kuantitas ditampilkan dalam satuan stok barang | Gudang, Owner, role terkait | Must |
+| INV-01 | Stok per item dan area gudang | Saldo Bahan Baku, Kemasan, dan Barang Jadi per lot serta area; status fisik, tersedia, staging/produksi setelah serah-terima, karantina QC, rework, dalam pengiriman, dan ditolak; seluruh kuantitas dalam satuan stok barang | Gudang, Owner, role terkait | Must |
 | INV-02 | Batch dan kedaluwarsa | Nomor batch, tanggal produksi/kedaluwarsa, supplier, status QC, saran FEFO, blokir batch | Gudang, QC | Must |
-| INV-03 | Pergerakan stok | Penerimaan, pengeluaran/hasil produksi, perpindahan antar-area internal, dispatch penjualan, serah terima, retur, waste, dan koreksi | Gudang, role sumber | Must |
+| INV-03 | Pergerakan stok | Penerimaan, pengeluaran bahan setelah konfirmasi serah-terima Produksi/QC, konsumsi seluruh bahan batch, output karantina, release/hold/rework/reject QC, perpindahan antar-area internal, dispatch penjualan, serah terima, retur, waste, dan koreksi | Gudang, role sumber | Must |
 | INV-04 | Alokasi pesanan agen | Reservasi produk siap jual untuk pesanan Agen 1/Agen 2; kekurangan otomatis menjadi kebutuhan produksi | Admin Penjualan/Sales, Gudang, Produksi, Owner | Must |
 | INV-05 | Pengambilan dan pengiriman | Picking FEFO, packing, surat jalan, dispatch, stok dalam pengiriman, bukti penerimaan, jumlah diterima/rusak/selisih, dan penyelesaian | Gudang, Admin Penjualan/Sales | Must |
 | INV-06 | Stok opname | Jadwal, hitung per barang/batch, selisih, alasan, persetujuan koreksi | Gudang, Owner | Must |
 | INV-07 | Peringatan stok | Minimum, kelebihan, tidak bergerak, mendekati kedaluwarsa, kebutuhan produksi tidak cukup | Gudang, Purchasing, Produksi, Owner | Must |
 | INV-08 | Penelusuran | Dari batch bahan ke produksi, produk jadi, pemenuhan, pesanan, Agen 1/Agen 2 penerima, dan retur | QC, Gudang, Owner | Must |
+| INV-09 | Permintaan bahan produksi | Kebutuhan standar dari resep dalam satuan stok, antrean permintaan, keputusan konfirmasi/tunda dan hitung mundur, stok lulus QC, kekurangan, lot FEFO, eskalasi ke Purchasing, serta konfirmasi serah-terima Produksi/QC | Gudang, Produksi, QC, Purchasing, Owner | Must |
 
-**Kriteria penerimaan inventori:** saldo setiap area selalu dapat dijelaskan oleh pergerakan stok; stok negatif ditolak kecuali override Owner yang tercatat; pengiriman pesanan memiliki batch, jumlah berangkat, jumlah diterima, selisih/rusak, dan bukti. Barang dalam pengiriman tetap tercatat sebagai stok terkendali Roti Hanan sampai penerimaan agen dikonfirmasi oleh staf internal berdasarkan bukti.
+**Kriteria penerimaan inventori:** saldo setiap Bahan Baku, Kemasan, dan Barang Jadi pada setiap area selalu dapat dijelaskan oleh pergerakan stok; stok negatif ditolak kecuali override Owner yang tercatat; pembuatan dan persetujuan permintaan Produksi tidak mengubah saldo; stok Gudang baru berkurang ketika Produksi/QC mengonfirmasi serah-terima per lot. Seluruh bahan yang diterima Produksi dianggap digunakan dan tidak dikembalikan sebagai sisa. Output berhasil belum tersedia untuk dijual sampai dilepas QC. Pengiriman pesanan memiliki batch, jumlah berangkat, jumlah diterima, selisih/rusak, dan bukti. Barang dalam pengiriman tetap tercatat sebagai stok terkendali Roti Hanan sampai penerimaan agen dikonfirmasi oleh staf internal berdasarkan bukti.
 
 ### 3.4 Purchasing
 
@@ -354,15 +456,16 @@ Barang Jadi awal dapat mencakup `RJ-001 Roti Sobek Coklat`, `RJ-002 Roti Tawar`,
 
 | ID | Fitur | Subfitur dan spesifikasi | Role | Prioritas |
 |---|---|---|---|---|
-| PRD-01 | Resep berversi | Formula, satuan, ukuran batch, output standar, langkah, waktu/suhu/berat standar, versi aktif | Produksi, QC, Owner | Must |
+| PRD-01 | Pemakaian Master Resep aktif | Produksi memilih SKU dan sistem mengambil versi resep aktif yang berlaku dari Master Data; output standar, komponen, kuantitas, toleransi, serta langkah menjadi read-only dan disimpan sebagai snapshot batch | Staff Produksi menggunakan; QC melihat referensi; Owner berwenang penuh | Must |
 | PRD-02 | Rencana produksi | Kebutuhan pesanan Agen 1/Agen 2, histori, target stok pusat, bahan, kapasitas, tanggal dan prioritas | Produksi, Owner | Must |
-| PRD-03 | Perintah dan batch produksi | Nomor batch, produk, resep, target, jadwal, tim, mesin, status | Produksi | Must |
-| PRD-04 | Pemakaian bahan | Rencana, reservasi, pengeluaran per batch bahan, pemakaian aktual, sisa kembali | Produksi, Gudang | Must |
+| PRD-03 | Perintah dan batch produksi | Nomor batch, produk, resep, target, jadwal, tim, mesin, formulir permintaan bahan bersatuan, batas waktu, dan status lintas role | Produksi | Must |
+| PRD-04 | Permintaan dan serah-terima bahan | Hitung standar proporsional dari resep dan target; Produksi mengirim permintaan ke Gudang; Gudang menyetujui/menunda, memilih lot FEFO, atau meneruskan kekurangan ke Purchasing; Produksi/QC mengonfirmasi penerimaan sebelum stok Gudang berkurang | Produksi, Gudang, QC, Purchasing | Must |
 | PRD-05 | Proses produksi | Waktu mulai/selesai, langkah, suhu/waktu aktual, catatan kendala dan waktu berhenti | Produksi | Must |
-| PRD-06 | Hasil dan waste | Hasil baik, rework, gagal, susut, alasan, output lot, perbandingan target | Produksi, QC, Owner | Must |
+| PRD-06 | Input hasil Produksi | Form penyelesaian berisi jumlah berhasil, jumlah gagal/waste, alasan kegagalan, catatan, output lot, dan perbandingan target; tidak memiliki input sisa bahan; angka merupakan input Staff Produksi dan read-only bagi QC | Staff Produksi, Owner; QC melihat | Must |
+| PRD-07 | Finalisasi batch atomik | Otomatis mengonsumsi seluruh bahan yang telah diserahterimakan, memposting waste, membuat output berhasil di karantina QC, menghitung biaya, menjaga idempotensi, dan menyediakan transaksi koreksi resmi | Produksi, Owner | Must |
 | QC-01 | QC bahan masuk | Template per Barang/Bahan, referensi PO/penerimaan/supplier/lot, sampel, kondisi kemasan, jumlah/berat, batch, kedaluwarsa, parameter mutu, foto/catatan, hasil lulus/ditahan/ditolak | QC | Must |
 | QC-02 | QC proses | Pemeriksaan penimbangan, adonan, fermentasi, panggang, kebersihan, penyimpangan | QC | Must |
-| QC-03 | QC produk jadi | QC akhir wajib: berat, bentuk, warna, tekstur/kematangan, kemasan, segel, label, batch, kedaluwarsa, lulus/ditahan/rework/tolak | QC | Must |
+| QC-03 | QC produk jadi dan disposisi kuantitas | QC akhir wajib: jumlah diperiksa, berat, bentuk, warna, tekstur/kematangan, kemasan, segel, label, batch, kedaluwarsa, serta kuantitas lulus/ditahan/rework/ditolak; total disposisi harus sama dengan hasil berhasil yang diperiksa | QC | Must |
 | QC-04 | Ketidaksesuaian | Masalah, jumlah terdampak, akar dugaan, tindakan sementara/perbaikan, PIC, tenggat | QC, Produksi, Owner | Must |
 | QC-05 | Sanitasi | Jadwal dan checklist kebersihan area/alat, bukti, masalah dan tindak lanjut | QC, Produksi | Should |
 | QC-06 | Trace/recall | Cari batch, blokir stok pusat, daftar pesanan dan agen penerima terdampak, tindakan penarikan | QC, Owner, Gudang | Must |
@@ -375,7 +478,15 @@ Parameter contoh QC bahan masuk:
 
 Gudang tetap melakukan pemeriksaan dasar jumlah, identitas barang, kemasan, batch, dan kedaluwarsa meskipun `wajib_qc = false`. Untuk barang wajib QC, stok fisik masuk ke karantina, `on_hand` bertambah dalam satuan stok, tetapi `available` tetap nol sampai keputusan lulus. Pemeriksaan dapat memakai sampel dan setiap hasil menyimpan petugas, waktu, checklist, nilai, catatan, serta lampiran.
 
-**Kriteria penerimaan produksi/QC:** setiap batch menyimpan resep yang digunakan, batch bahan, hasil, waste, dan keputusan QC; hanya QC Inspector/Owner berwenang yang dapat mengambil keputusan; seluruh Barang Jadi belum dapat dikirim/dijual sebelum status QC akhir lulus.
+Pada daftar batch, kolom **Hasil / Waste** selalu bersumber dari form penyelesaian Produksi. Contoh tampilan `584 / 16` berarti Staff Produksi melaporkan `584` berhasil dan `16` gagal/waste; nilai tersebut bukan angka turunan dari target dan bukan hasil input QC. QC menerima maksimum 584 unit untuk didisposisikan lebih lanjut.
+
+Perhitungan kebutuhan standar menggunakan:
+
+`kebutuhan komponen = target output ÷ output standar resep × kuantitas komponen resep`
+
+Contoh: resep standar menghasilkan 100 Box dan membutuhkan 10 Kg tepung. Target 600 Box menghasilkan permintaan standar 60 Kg. Pembuatan permintaan dan persetujuan Gudang belum mengubah stok; stok lot terkait baru berkurang 60 Kg ketika Produksi/QC mengonfirmasi penerimaan. Seluruh 60 Kg kemudian dianggap digunakan untuk batch dan tidak ada input pengembalian sisa.
+
+**Kriteria penerimaan produksi/QC:** setiap batch menyimpan SKU, versi resep, target, kebutuhan standar, dokumen permintaan, keputusan/tunda Gudang, eskalasi pembelian bila kurang, batch/lot bahan yang disetujui, pelaku/waktu konfirmasi serah-terima, hasil berhasil, gagal/waste, alasan, output lot karantina, serta disposisi kuantitas QC. Tidak ada field sisa bahan dan tidak ada pengembalian sisa ke Gudang. Finalisasi tidak boleh menyebabkan stok negatif dan dijalankan atomik/idempotent. Hanya QC Inspector/Owner berwenang yang dapat menetapkan disposisi QC; QC tidak dapat mengubah hasil Produksi; seluruh Barang Jadi belum dapat dikirim/dijual sebelum kuantitas terkait berstatus lulus.
 
 ### 3.6 Keuangan dan kas
 
@@ -413,11 +524,11 @@ Gudang tetap melakukan pemeriksaan dasar jumlah, identitas barang, kemasan, batc
 | ANA-01 | Dashboard Owner | Penjualan, laba, kas, utang/piutang, stok, produksi, waste, QC, purchasing, HR, masalah terbuka | Owner | Must |
 | ANA-02 | Dashboard role | Daftar tugas dan metrik sesuai Admin Penjualan/Sales, Gudang, Produksi, QC, Purchasing, HR/Finance | Semua | Must |
 | ANA-03 | Peringatan tindakan | Stok kurang/kedaluwarsa, produksi terlambat, QC hold, PO terlambat, piutang jatuh tempo, selisih | Role terkait | Must |
-| ANA-04 | Filter analitik | Periode, kategori Agen 1/Agen 2, produk, pelanggan, supplier, dan status | Owner, role terkait | Must |
+| ANA-04 | Filter analitik | Periode, kategori Agen 1/Agen 2, kategori Barang Jadi, tipe, varian, SKU, pelanggan, supplier, dan status | Owner, role terkait | Must |
 | ANA-05 | Laporan rutin | Harian, mingguan, bulanan, cetak/unduh, snapshot saat tutup hari/bulan | Owner, role terkait | Must |
 | ANA-06 | Ringkasan otomatis | Ringkasan harian dan daftar pengecualian untuk Owner | Owner | Should |
 
-**Kriteria penerimaan dashboard:** angka dapat dibuka sampai ke transaksi sumber, menghormati hak role, menampilkan perbandingan kategori Agen 1/Agen 2, dan menampilkan waktu pembaruan terakhir.
+**Kriteria penerimaan dashboard:** angka dapat dibuka sampai ke transaksi sumber, menghormati hak role, menampilkan perbandingan kategori Agen 1/Agen 2, dapat diurai menurut kategori/tipe/varian/SKU Barang Jadi, dan menampilkan waktu pembaruan terakhir.
 
 ---
 
@@ -461,6 +572,37 @@ Role tidak pernah dipilih bebas pada form login dan satu user tidak boleh memili
 4. Role terkait lain membaca record yang sama dalam mode terbatas atau read-only; sistem tidak membuat salinan master per role.
 5. Perubahan divalidasi di server/RLS, lalu menyimpan pelaku, waktu, nilai lama/baru, dan alasan bila field sensitif.
 6. Record yang pernah dipakai transaksi hanya dapat dinonaktifkan. Record nonaktif tetap tampil pada histori tetapi tidak dapat dipilih pada transaksi baru.
+7. Staff Produksi atau Owner dapat mengelola kategori, tipe di bawah kategori, dan varian di bawah tipe melalui Master Data tanpa perubahan kode aplikasi.
+8. Saat membuat SKU Barang Jadi, pengguna memilih kategori, lalu sistem hanya menampilkan tipe milik kategori tersebut dan varian milik tipe terpilih. Untuk kategori Roti Black Forest, tipe dan varian tidak diperlukan pada struktur awal.
+9. Sistem menolak kombinasi duplikat dan menghasilkan satu record SKU berbeda untuk setiap kombinasi akhir, termasuk Reguler dan Mini dengan rasa yang sama.
+10. Komponen kemasan ditetapkan pada resep/BOM SKU. Reguler dan Mini boleh berbagi komposisi rasa, tetapi mempunyai komponen kemasan masing-masing.
+11. Role pembuat yang berwenang membuka **Master Data → Resep Produksi**, memilih tepat satu SKU Barang Jadi, lalu membuat resep versi draft.
+12. Role pembuat mengisi output standar, Bahan Baku/Bahan Mentah, Kemasan, kuantitas dalam satuan stok, toleransi, serta langkah dan parameter proses.
+13. Resep draft diajukan untuk review/approval. QC meninjau sesuai haknya dan Owner tetap memiliki kewenangan penuh; identitas pelaku, waktu, keputusan, dan catatan disimpan.
+14. Hanya versi resep aktif dan berlaku yang dapat dipilih ketika membuat perintah produksi. Formula tidak dapat diedit dari transaksi batch.
+15. Perubahan terhadap resep aktif membuat versi draft baru. Batch lama tetap mengacu snapshot versi yang digunakan dan tidak berubah ketika versi baru diaktifkan.
+
+Contoh struktur menu untuk Staff Produksi dan QC:
+
+```text
+Staff Produksi
+├── Master Data
+│   ├── Barang Jadi
+│   └── Resep Produksi          [buat/revisi/ajukan]
+└── Produksi
+    ├── Rencana Produksi
+    ├── Batch Produksi          [menggunakan resep aktif]
+    └── Hasil Produksi
+
+QC Inspector
+├── Master Data
+│   ├── Persyaratan QC
+│   └── Resep Produksi          [review/approval sesuai hak]
+└── Quality Control
+    ├── QC Bahan Masuk
+    ├── QC Proses
+    └── QC Produk Jadi
+```
 
 Contoh struktur untuk Admin Penjualan/Sales:
 
@@ -511,15 +653,15 @@ Batas kredit          : Rp15.000.000
 Piutang terbuka       : Rp13.000.000
 Sisa batas kredit     : Rp 2.000.000
 
-Produk                : RJ-001 — Roti Sobek Coklat
-Harga Agen 1          : Rp4.500/Pcs
-Jumlah                : 200 Pcs
+Produk                : SKU contoh — Roti Box / Reguler / Coklat Keju
+Harga Agen 1          : Rp4.500/satuan jual
+Jumlah                : 200 satuan jual
 Nilai transaksi       : Rp900.000
 Piutang setelah jual  : Rp13.900.000
 Sisa kredit sesudahnya: Rp 1.100.000
 ```
 
-Jika pelanggan yang dipilih berkategori Agen 2 dan Harga Agen 2 adalah Rp5.000/Pcs, POS otomatis menggunakan Rp5.000 tanpa pilihan manual dari kasir. Harga yang dipakai disimpan pada detail transaksi agar transaksi lama tidak berubah ketika master harga diperbarui.
+Jika pelanggan yang dipilih berkategori Agen 2 dan Harga Agen 2 untuk SKU Roti Box adalah Rp5.000/Box, POS otomatis menggunakan Rp5.000 per Box tanpa pilihan manual dari kasir. Harga yang dipakai disimpan pada detail transaksi agar transaksi lama tidak berubah ketika master harga diperbarui.
 
 ### 4.4 Pesanan agen dan penawaran
 
@@ -575,27 +717,32 @@ Status penerimaan:
 
 ### 4.7 Produksi dan QC produk jadi
 
-1. Staff Produksi melihat kebutuhan dari pesanan Agen 1/Agen 2, target stok pusat, dan histori.
-2. Staff menyusun rencana menurut bahan, kapasitas, tenaga, serta prioritas.
-3. Rencana yang disetujui menghasilkan perintah produksi dan nomor batch.
-4. Gudang mengeluarkan bahan berdasarkan batch dan saran FEFO.
-5. Staff Produksi mencatat langkah, waktu, parameter, dan kendala.
-6. QC melakukan pemeriksaan proses sesuai template.
-7. Produksi mencatat hasil baik, rework, gagal, dan sisa bahan.
-8. QC memeriksa produk jadi.
-9. Jika lulus, output masuk stok produk jadi siap dialokasikan ke pesanan atau dijual melalui POS.
-10. Jika ditahan/rework/ditolak, stok dipisahkan dan tindak lanjut wajib dicatat.
-11. Biaya aktual serta waste diperbarui.
+1. Staff Produksi/Owner membuat resep/BOM per SKU melalui **Master Data → Resep Produksi**; QC melakukan review/approval sesuai kebijakan. Aktivasi membuat versi resep tersedia untuk batch baru tanpa mengubah batch lama.
+2. Staff Produksi melihat kebutuhan dari pesanan Agen 1/Agen 2, target stok pusat, dan histori, lalu menyusun rencana menurut bahan, kapasitas, tenaga, serta prioritas.
+3. Rencana yang disetujui menghasilkan perintah produksi, nomor batch, dan snapshot versi resep.
+4. Sistem menghitung kebutuhan standar setiap Bahan Baku/Kemasan secara proporsional terhadap target dan membentuk formulir permintaan bersatuan kepada Gudang tanpa mengubah saldo stok.
+5. Gudang menerima notifikasi/antrean, memeriksa stok lulus QC serta lot FEFO, lalu memilih: menyetujui; menunda dengan alasan dan hitung mundur; atau menandai kekurangan.
+6. Jika stok kurang, Gudang meneruskan permintaan pembelian resmi ke Staff Purchasing. Purchasing membuat PO ke supplier dan Gudang memeriksa ulang setelah bahan diterima serta lulus QC bila diwajibkan.
+7. Jika disetujui Gudang, Produksi/QC mengonfirmasi serah-terima. Pada langkah inilah stok Gudang berkurang dan bahan per lot berpindah ke staging Produksi.
+8. Staff Produksi mencatat langkah, waktu, parameter, dan kendala; QC melakukan pemeriksaan proses sesuai template.
+9. Saat produksi selesai, Staff Produksi hanya mengisi jumlah berhasil, jumlah gagal/waste, alasan kegagalan, dan catatan. QC hanya dapat membaca angka hasil Produksi tersebut.
+10. Finalisasi atomik otomatis mengonsumsi seluruh bahan yang telah diserahterimakan, memposting waste, biaya, dan output berhasil sebagai lot Barang Jadi di karantina QC (`on_hand` bertambah, `available = 0`). Tidak ada pengisian maupun pengembalian sisa bahan.
+11. QC memeriksa jumlah berhasil dan mengisi kuantitas lulus, ditahan, rework, dan ditolak. Totalnya harus sama dengan kuantitas yang diperiksa dan tidak boleh melebihi hasil berhasil Produksi.
+12. Kuantitas lulus berpindah ke stok produk jadi siap jual; ditahan tetap di karantina; rework dipisahkan untuk tindak lanjut; ditolak berpindah ke area ditolak/waste.
+13. Sistem memperbarui yield, waste, biaya aktual, serta traceability dari permintaan dan lot bahan sampai laporan batch dan lot produk jadi.
 
 Status produksi:
 
-`draft → dijadwalkan → bahan_disiapkan → berjalan → menunggu_QC → selesai`
+`draft → menunggu_gudang → ditunda_gudang | kekurangan_bahan → menunggu_pembelian → disetujui_gudang → bahan_dikonfirmasi_produksi/QC → berjalan → laporan_hasil → menunggu_QC → selesai`
 
 Alternatif status QC:
 
-- `menunggu_QC → lulus → selesai`
-- `menunggu_QC → ditahan → rework → menunggu_QC`
-- `menunggu_QC → ditolak → ditutup`
+- `menunggu_QC → lulus_sebagian/seluruhnya → release_stok`
+- `menunggu_QC → ditahan → tetap_karantina`
+- `menunggu_QC → rework → proses_rework → menunggu_QC_ulang`
+- `menunggu_QC → ditolak → area_ditolak/pemusnahan`
+
+Satu pemeriksaan dapat menghasilkan disposisi campuran, misalnya sebagian lulus dan sebagian ditahan. Status batch selesai hanya jika seluruh kuantitas berhasil telah memiliki disposisi dan tindak lanjut kuantitas non-lulus tidak lagi menggantung.
 
 ### 4.8 Retur, masalah kualitas, dan penarikan batch
 
@@ -715,7 +862,9 @@ Proses yang mengubah beberapa tabel harus berjalan sebagai satu transaksi. Conto
 - `close_sales_shift`: menghitung ekspektasi kas serta selisih shift POS.
 - `receive_purchase`: memvalidasi satuan beli, memakai snapshot konversi, mencatat kuantitas stok, lot, karantina, dan nilai penerimaan secara atomik.
 - `release_incoming_qc`: mengubah stok karantina menjadi siap pakai atau ditolak.
-- `issue_production_materials`: mengeluarkan bahan berdasarkan lot.
+- `review_production_material_request`: menyimpan keputusan konfirmasi/tunda Gudang dan alokasi lot tanpa mengubah saldo.
+- `confirm_production_material_handover`: memvalidasi persetujuan Gudang dan saldo terbaru, lalu mengurangi stok Gudang serta memindahkan bahan per lot ke staging secara atomik.
+- `create_purchase_request_from_shortage`: membentuk permintaan pembelian dari kekurangan bahan Produksi untuk antrean Purchasing.
 - `complete_production_batch`: mencatat konsumsi, output, waste, dan lot produk.
 - `release_finished_goods`: mengubah output menjadi siap jual/alokasi setelah QC.
 - `dispatch_sales_delivery`: memindahkan barang pesanan ke status dalam pengiriman tanpa memfinalkan penjualan.
@@ -767,13 +916,26 @@ Pekerjaan terjadwal:
 ```mermaid
 flowchart LR
     SO[Pesanan Agen 1 dan Agen 2] --> PP[Rencana produksi]
-    PP --> NEED[Kebutuhan bahan]
-    NEED --> PO[Pembelian]
+    RMASTER[Master Data Resep Produksi] --> RECIPE[Versi resep aktif per SKU]
+    RECIPE --> NEED[Kebutuhan standar bahan]
+    PP --> NEED
+    NEED --> REQ[Permintaan bahan ke Gudang]
+    REQ --> WH{Stok lulus QC cukup?}
+    WH -->|kekurangan| PO[Permintaan ke Purchasing]
     PO --> RCV[Penerimaan + QC]
-    RCV --> RAW[Stok bahan]
-    RAW --> PROD[Produksi batch]
-    PROD --> FQC[QC produk jadi]
-    FQC --> FG[Stok produk jadi]
+    RCV --> RAW[Stok Bahan Baku dan Kemasan]
+    RAW --> WH
+    WH -->|disetujui| HAND[Konfirmasi serah-terima Produksi / QC]
+    HAND --> ISSUE[Stok Gudang berkurang per lot / FEFO]
+    ISSUE --> PROD[Produksi batch]
+    PROD --> WASTE[Gagal / waste]
+    PROD --> QSTOCK[Hasil berhasil di karantina QC]
+    QSTOCK --> FQC[QC produk jadi + disposisi kuantitas]
+    FQC -->|lulus| FG[Stok produk jadi siap jual]
+    FQC -->|ditahan| QSTOCK
+    FQC -->|rework| REWORK[Area / proses rework]
+    FQC -->|ditolak| REJECT[Area ditolak / waste]
+    REWORK --> FQC
     FG --> FUL[Pemenuhan pesanan / POS pusat]
     FUL --> HAND[Pengambilan atau pengiriman]
     HAND --> ACC[Penerimaan agen]
@@ -855,7 +1017,7 @@ Alur deployment:
 | Tabel | Kolom inti | Kegunaan dan relasi |
 |---|---|---|
 | `business_profile` | `id`, `code`, `name`, `address`, `timezone`, `currency`, `is_active` | Satu record profil pusat/pabrik Roti Hanan Bandung |
-| `warehouses` | `id`, `code`, `name`, `warehouse_type`, `is_active` | Area internal bahan, kemasan, karantina, produk jadi, dalam pengiriman, dan ditolak |
+| `warehouses` | `id`, `code`, `name`, `warehouse_type`, `is_active` | Area internal dengan tipe Bahan Baku, Kemasan, Staging/Produksi, Karantina QC, Rework, Produk Jadi, Dalam Pengiriman, atau Ditolak |
 | `user_profiles` | `id`, `auth_user_id`, `employee_id`, `login_email`, `username`, `full_name`, `role`, `role_assigned_by`, `must_change_password`, `last_login_at`, `is_active`, `disabled_at` | Profil aplikasi; Gmail/username unik, tepat satu role aktif, `auth_user_id` mengacu `auth.users`, dan tidak menyimpan password |
 | `role_permissions` | `id`, `role`, `resource`, `action`, `field_group`, `is_allowed` | Hak menu, baca, tambah, ubah, nonaktifkan, approval, dan kelompok field Master Data; menjadi dasar policy/server validation per role |
 | `approval_rules` | `id`, `document_type`, `condition_type`, `threshold`, `approver_role`, `is_active` | Aturan persetujuan diskon, nilai, selisih, koreksi |
@@ -864,7 +1026,7 @@ Alur deployment:
 | `attachments` | `id`, `reference_type`, `reference_id`, `bucket`, `storage_key`, `url`, `mime_type`, `uploaded_by` | Metadata dokumen/foto privat |
 | `audit_logs` | `id`, `table_name`, `record_id`, `action`, `old_data`, `new_data`, `reason`, `actor_id`, `created_at` | Jejak perubahan append-only |
 
-### 6.3 Master Barang/Bahan, Barang Jadi, pelanggan, supplier, dan harga
+### 6.3 Master Barang/Bahan, klasifikasi Barang Jadi, Resep Produksi, pelanggan, supplier, dan harga
 
 `items` adalah registri inventori internal bersama agar lot dan ledger stok dapat memakai satu foreign key. Pengguna tidak mengelola satu master gabungan: UI dan hak akses tetap memisahkan **Master Barang/Bahan** dan **Master Barang Jadi** melalui tabel detail satu-ke-satu.
 
@@ -873,10 +1035,12 @@ Alur deployment:
 | `units` | `id`, `code`, `name`, `unit_family`, `factor_to_base`, `is_automatic`, `decimal_precision`, `is_active` | Keluarga Berat/Volume/Jumlah mempunyai faktor standar; Kemasan tidak dikonversi otomatis |
 | `items` | `id`, `code`, `name`, `item_kind`, `stock_unit_id`, `requires_lot`, `is_active` | Registri internal dengan `item_kind = MATERIAL` atau `FINISHED_PRODUCT`; kode unik; tanpa barcode |
 | `materials` | `item_id`, `material_type`, `purchase_unit_id`, `purchase_content_value`, `purchase_content_unit_id`, `conversion_to_stock`, `default_purchase_price`, `min_stock`, `shelf_life_days`, `requires_qc`, `notes` | Isi kemasan diinput manual; `conversion_to_stock` dihitung otomatis dari satuan isi ke `items.stock_unit_id` |
-| `finished_products` | `item_id`, `product_type`, `sales_unit_id`, `weight_value`, `weight_unit_id`, `shelf_life_days`, `min_stock`, `requires_final_qc`, `notes` | Master Barang Jadi terpisah; `sales_unit_id` wajib sama dengan `items.stock_unit_id`; `requires_final_qc` selalu benar |
-| `recipes` | `id`, `finished_product_item_id`, `version`, `batch_output_qty`, `status`, `effective_from`, `approved_by` | Versi resep Barang Jadi |
-| `recipe_items` | `id`, `recipe_id`, `material_item_id`, `quantity_stock_unit`, `waste_tolerance` | Komposisi hanya memakai Barang/Bahan dan selalu dalam satuan stok bahan |
-| `recipe_steps` | `id`, `recipe_id`, `sequence`, `name`, `standard_minutes`, `standard_temperature`, `instructions` | Langkah produksi standar |
+| `finished_product_categories` | `id`, `code`, `name`, `requires_type`, `requires_variant`, `sort_order`, `is_active` | Kategori utama yang dapat dikelola; data awal `Roti Black Forest` tidak mewajibkan tipe/varian dan `Roti Box` mewajibkan tipe/varian |
+| `finished_product_types` | `id`, `category_id`, `code`, `name`, `sort_order`, `is_active` | Tipe langsung di bawah satu kategori; data awal Roti Box: Reguler, Mix, Ekonomis, dan Mini |
+| `finished_product_variants` | `id`, `type_id`, `code`, `name`, `description`, `sort_order`, `is_active` | Varian langsung di bawah satu tipe; nama Coklat Keju dapat ada pada Reguler dan Mini sebagai record terpisah agar masing-masing dapat berubah |
+| `finished_products` | `item_id`, `category_id`, `finished_product_type_id`, `variant_id`, `sales_unit_id`, `content_quantity`, `content_unit_id`, `weight_value`, `weight_unit_id`, `shelf_life_days`, `min_stock`, `requires_final_qc`, `notes` | Satu record per SKU; tipe/varian nullable hanya untuk kategori mandiri; satuan/isi kemasan dikonfigurasi per SKU; `sales_unit_id` wajib sama dengan `items.stock_unit_id`; `requires_final_qc` selalu benar |
+| `recipes` | `id`, `finished_product_item_id`, `version`, `batch_output_qty`, `status`, `effective_from`, `effective_until`, `created_by`, `reviewed_by`, `approved_by` | Master Resep/BOM per SKU Barang Jadi; dikelola melalui Master Data Resep Produksi dan digunakan secara read-only oleh transaksi batch |
+| `recipe_items` | `id`, `recipe_id`, `material_item_id`, `component_role`, `quantity_stock_unit`, `waste_tolerance` | Komposisi hanya memakai Barang/Bahan dalam satuan stok; `component_role` membedakan `INGREDIENT` dan `PACKAGING`, sehingga SKU Reguler dan Mini dapat memakai bahan rasa yang sama tetapi kemasan berbeda |
 | `customer_categories` | `id`, `code`, `name`, `is_system` | Tepat dua nilai sistem terkunci: `AGEN_1` dan `AGEN_2` |
 | `customers` | `id`, `code`, `name`, `contact_name`, `customer_category_id`, `phone`, `address`, `city`, `payment_terms_days`, `credit_limit`, `notes`, `is_active` | Pelanggan eksternal B2B; kategori wajib; `credit_limit` adalah batas maksimum hutang/piutang terbuka |
 | `suppliers` | `id`, `code`, `name`, `contact_name`, `phone`, `address`, `city`, `payment_terms_days`, `notes`, `is_active` | Master supplier berkode unik untuk Bahan Baku/Kemasan |
@@ -889,6 +1053,15 @@ Constraint penting:
 - `materials.conversion_to_stock > 0` merupakan nilai turunan dan bermakna `1 satuan beli = conversion_to_stock satuan stok`.
 - `default_purchase_price` adalah harga per satuan beli; biaya dasar per satuan stok dihitung dengan pembagian terhadap konversi.
 - `finished_products.sales_unit_id = items.stock_unit_id`.
+- Kategori yang `requires_type = true` mewajibkan `finished_product_type_id`; kategori yang `requires_variant = true` mewajibkan `variant_id` sebelum SKU dapat diaktifkan.
+- `finished_products.finished_product_type_id` harus berada di bawah `finished_products.category_id`, dan `finished_products.variant_id` harus berada di bawah `finished_products.finished_product_type_id`.
+- Kode/nama tipe unik di dalam kategori dan kode/nama varian unik di dalam tipe; nama varian yang sama boleh digunakan pada tipe berbeda.
+- Kombinasi `category_id`, `finished_product_type_id`, dan `variant_id` unik untuk SKU aktif; nilai nullable dinormalisasi pada unique index agar produk mandiri seperti Roti Black Forest tidak terduplikasi.
+- Kategori, tipe, atau varian yang sudah direferensikan SKU/transaksi hanya dapat dinonaktifkan. SKU historis tetap mempertahankan foreign key dan nama pada snapshot transaksi/laporan.
+- Untuk seluruh SKU berkategori Roti Box, `sales_unit_id` dan `items.stock_unit_id` wajib menunjuk satuan `Box`. `content_quantity` dan `content_unit_id` bersifat opsional sampai jumlah roti per box diketahui; ketiadaan nilai tersebut tidak menghalangi aktivasi atau transaksi berbasis Box. Satuan SKU Roti Black Forest tetap wajib dikonfirmasi dan diisi sebelum aktif.
+- Setiap resep mengacu tepat satu `finished_product_item_id`; komponen resep hanya dapat memilih item aktif berjenis Bahan Baku atau Kemasan dari Master Barang/Bahan.
+- Formula pada versi berstatus `ACTIVE` bersifat immutable. Revisi membuat versi `DRAFT` baru dan tidak mengubah snapshot batch historis.
+- Hanya satu versi resep yang boleh aktif untuk SKU dan rentang tanggal efektif yang sama. Perintah produksi menolak resep draft, review, nonaktif, kedaluwarsa, atau milik SKU lain.
 - Setiap Barang Jadi aktif wajib mempunyai satu Harga Agen 1 aktif dan satu Harga Agen 2 aktif sebelum dapat dijual.
 - `customers.payment_terms_days` dan `suppliers.payment_terms_days` berupa bilangan hari non-negatif; `0` berarti tunai.
 - Kode item, pelanggan, dan supplier unik tanpa membedakan huruf besar/kecil.
@@ -912,9 +1085,9 @@ Constraint penting:
 | Tabel | Kolom inti | Kegunaan dan relasi |
 |---|---|---|
 | `inventory_lots` | `id`, `item_id`, `lot_number`, `supplier_lot`, `manufactured_at`, `expires_at`, `qc_status`, `blocked_at` | Identitas batch/lot dan status mutu |
-| `stock_movements` | `id`, `movement_number`, `movement_type`, `item_id`, `inventory_lot_id`, `from_warehouse_id`, `to_warehouse_id`, `quantity`, `unit_cost`, `reference_type`, `reference_id`, `occurred_at` | Ledger stok append-only |
-| `stock_balances` | `warehouse_id`, `item_id`, `inventory_lot_id`, `on_hand`, `reserved`, `available`, `updated_at` | Saldo terawat server; bukan input manual |
-| `stock_reservations` | `id`, `warehouse_id`, `item_id`, `inventory_lot_id`, `reference_type`, `reference_id`, `quantity`, `status`, `expires_at` | Alokasi untuk produksi atau pesanan agen |
+| `stock_movements` | `id`, `movement_number`, `movement_type`, `item_id`, `inventory_lot_id`, `from_warehouse_id`, `to_warehouse_id`, `quantity`, `unit_cost`, `reference_type`, `reference_id`, `occurred_at`, `posted_by` | Ledger stok append-only; mencakup serah-terima bahan Produksi, konsumsi batch, output karantina, release/hold/rework/reject QC, waste, dan pembalik |
+| `stock_balances` | `warehouse_id`, `item_id`, `inventory_lot_id`, `on_hand`, `reserved`, `available`, `updated_at` | Saldo Bahan Baku, Kemasan, dan Barang Jadi yang dirawat server; bukan input manual dan bukan diduplikasi pada modul sumber |
+| `stock_reservations` | `id`, `warehouse_id`, `item_id`, `inventory_lot_id`, `reference_type`, `reference_id`, `quantity`, `status`, `expires_at` | Alokasi stok Barang Jadi untuk pesanan agen; permintaan bahan Produksi tidak memakai reservation |
 | `stock_counts` | `id`, `count_number`, `warehouse_id`, `scheduled_at`, `status`, `approved_by` | Header stok opname |
 | `stock_count_items` | `id`, `stock_count_id`, `item_id`, `inventory_lot_id`, `system_qty`, `counted_qty`, `difference`, `reason` | Hasil hitung dan selisih |
 | `stock_transfers` | `id`, `transfer_number`, `from_warehouse_id`, `to_warehouse_id`, `reference_type`, `reference_id`, `status`, `moved_at`, `moved_by` | Perpindahan internal antar-area gudang pada satu pusat; tidak membentuk penjualan |
@@ -924,7 +1097,7 @@ Constraint penting:
 
 | Tabel | Kolom inti | Kegunaan dan relasi |
 |---|---|---|
-| `purchase_requests` | `id`, `request_number`, `needed_at`, `priority`, `reason`, `status`, `requested_by` | Kebutuhan pembelian pusat |
+| `purchase_requests` | `id`, `request_number`, `production_order_id`, `material_request_id`, `needed_at`, `priority`, `reason`, `status`, `requested_by`, `purchase_order_id` | Kebutuhan pembelian yang dapat berasal dari kekurangan permintaan Produksi dan diteruskan Gudang kepada Purchasing |
 | `purchase_request_items` | `id`, `purchase_request_id`, `material_item_id`, `requested_stock_qty`, `suggested_purchase_qty`, `purchase_unit_id`, `conversion_to_stock_snapshot`, `approved_purchase_qty` | Kebutuhan awal dalam satuan stok dan saran/approval dalam satuan beli |
 | `supplier_quotations` | `id`, `quotation_number`, `supplier_id`, `purchase_request_id`, `valid_until`, `delivery_date`, `payment_terms_days`, `status` | Penawaran supplier dengan tempo dalam jumlah hari |
 | `supplier_quotation_items` | `id`, `supplier_quotation_id`, `material_item_id`, `purchase_quantity`, `purchase_unit_id`, `unit_price`, `discount`, `notes` | Detail harga pembanding per satuan beli |
@@ -941,18 +1114,30 @@ Constraint penting:
 |---|---|---|
 | `production_plans` | `id`, `plan_number`, `plan_date`, `status`, `approved_by` | Header rencana harian/periode pusat |
 | `production_plan_items` | `id`, `production_plan_id`, `finished_product_item_id`, `planned_qty`, `priority`, `source_summary`, `scheduled_at` | Target Barang Jadi dalam satuan jual/stok dan prioritas |
-| `production_orders` | `id`, `batch_number`, `production_plan_item_id`, `recipe_id`, `warehouse_id`, `target_qty`, `status`, `started_at`, `completed_at` | Eksekusi satu batch produksi |
-| `production_materials` | `id`, `production_order_id`, `material_item_id`, `inventory_lot_id`, `planned_qty`, `issued_qty`, `used_qty`, `returned_qty` | Rencana dan aktual bahan selalu dalam satuan stok material |
-| `production_steps` | `id`, `production_order_id`, `recipe_step_id`, `started_at`, `completed_at`, `actual_temperature`, `status`, `notes` | Realisasi tahap produksi |
-| `production_outputs` | `id`, `production_order_id`, `finished_product_item_id`, `inventory_lot_id`, `output_type`, `quantity`, `waste_reason`, `unit_cost` | Hasil baik, rework, gagal, susut dalam satuan jual/stok Barang Jadi |
+| `production_orders` | `id`, `batch_number`, `production_plan_item_id`, `recipe_id`, `recipe_version_snapshot`, `recipe_output_qty_snapshot`, `production_warehouse_id`, `qc_quarantine_warehouse_id`, `target_qty`, `status`, `started_at`, `completed_at`, `result_reported_by`, `finalized_by`, `finalized_at` | Eksekusi satu batch produksi dengan snapshot resep dan identitas pelapor/finalisasi |
+| `production_material_requests` | `id`, `request_number`, `production_order_id`, `requested_at`, `expires_at`, `deferred_until`, `defer_reason`, `warehouse_status`, `warehouse_confirmed_by`, `warehouse_confirmed_at`, `handover_confirmed_by`, `handover_confirmed_at` | Dokumen dan audit keputusan Produksi → Gudang; status menunggu, ditunda, kurang, disetujui, dan dikonfirmasi serah-terima |
+| `production_materials` | `id`, `production_order_id`, `material_request_id`, `recipe_item_id`, `material_item_id`, `inventory_lot_id`, `planned_qty`, `approved_qty`, `issued_qty`, `used_qty` | Kebutuhan standar, jumlah disetujui tanpa potong stok, jumlah yang diserahterimakan, dan konsumsi seluruh bahan per lot |
+| `production_steps` | `id`, `production_order_id`, `name`, `started_at`, `completed_at`, `actual_temperature`, `status`, `notes` | Realisasi tahap produksi operasional bila diperlukan; tidak bersumber dari Master Resep |
+| `production_outputs` | `id`, `production_order_id`, `finished_product_item_id`, `inventory_lot_id`, `output_type`, `quantity`, `waste_reason`, `unit_cost`, `reported_by`, `reported_at` | Input Produksi dengan `output_type = GOOD` atau `FAILED`; hanya `GOOD` membentuk lot Barang Jadi karantina QC |
 | `production_resources` | `id`, `code`, `name`, `resource_type`, `capacity`, `is_active` | Mesin/oven/mixer/area yang dapat dijadwalkan |
 | `production_order_resources` | `id`, `production_order_id`, `production_resource_id`, `planned_minutes`, `actual_minutes`, `downtime_minutes`, `notes` | Pemakaian dan kendala sumber daya per batch |
 | `quality_templates` | `id`, `name`, `inspection_type`, `item_id`, `version`, `is_active` | Template QC bahan/proses/akhir/sanitasi |
 | `quality_template_items` | `id`, `quality_template_id`, `sequence`, `check_name`, `data_type`, `min_value`, `max_value`, `unit`, `required` | Parameter dan batas standar |
-| `quality_inspections` | `id`, `inspection_number`, `inspection_type`, `reference_type`, `reference_id`, `supplier_id`, `inventory_lot_id`, `inspector_id`, `sample_size`, `sample_unit`, `status`, `result`, `inspected_at`, `notes` | Header pemeriksaan QC; incoming mengacu penerimaan/supplier/lot, final mengacu batch produksi |
+| `quality_inspections` | `id`, `inspection_number`, `inspection_type`, `reference_type`, `reference_id`, `supplier_id`, `inventory_lot_id`, `inspector_id`, `inspected_qty`, `sample_size`, `sample_unit`, `status`, `result`, `inspected_at`, `notes` | Header pemeriksaan QC; incoming mengacu penerimaan/supplier/lot, final mengacu output berhasil batch produksi |
 | `quality_results` | `id`, `quality_inspection_id`, `quality_template_item_id`, `value_text`, `value_number`, `is_pass`, `notes`, `attachment_id` | Hasil setiap parameter, catatan, dan bukti bila relevan |
+| `quality_dispositions` | `id`, `quality_inspection_id`, `disposition`, `quantity`, `from_warehouse_id`, `to_warehouse_id`, `reason`, `follow_up_reference_type`, `follow_up_reference_id`, `decided_by`, `decided_at` | Pembagian kuantitas final menjadi `PASS`, `HOLD`, `REWORK`, atau `REJECT` dan referensi pergerakan/tindak lanjutnya |
 | `nonconformances` | `id`, `case_number`, `source_type`, `source_id`, `inventory_lot_id`, `severity`, `description`, `disposition`, `owner_id`, `due_at`, `status` | Penyimpangan, CAPA, recall |
 | `sanitation_checks` | `id`, `quality_template_id`, `area`, `scheduled_at`, `performed_at`, `result`, `inspector_id` | Checklist kebersihan area/alat pusat |
+
+Constraint dan transaksi penting produksi/QC:
+
+- `recipes.batch_output_qty > 0`; kombinasi `finished_product_item_id + version` unik dan versi yang pernah dipakai batch tidak dapat diubah atau dihapus.
+- `production_materials.planned_qty` dihitung dari snapshot resep dan target. `approved_qty` belum mengubah saldo; posting `issued_qty` hanya terjadi setelah Produksi/QC mengonfirmasi serah-terima, lalu `used_qty = issued_qty` saat finalisasi karena tidak ada pengembalian sisa.
+- Total output `GOOD` dan `FAILED` tidak boleh negatif. Setiap nilai berasal dari form Produksi dan menyimpan `reported_by` serta waktu input.
+- Posting finalisasi batch harus idempotent dan atomik: konsumsi seluruh Bahan Baku/Kemasan yang diserahterimakan, waste, biaya, lot output `GOOD`, saldo karantina QC, dan status batch berhasil seluruhnya atau dibatalkan seluruhnya.
+- Lot output `GOOD` dibuat pada area Karantina QC dengan `available = 0`. Tidak ada pergerakan ke area Produk Jadi tanpa `quality_dispositions.disposition = PASS` dari QC berwenang.
+- Pada setiap pemeriksaan final, jumlah seluruh `quality_dispositions.quantity` wajib sama dengan `quality_inspections.inspected_qty`, tidak boleh melebihi saldo output yang belum didisposisikan, dan setiap disposisi memposting pergerakan/status stok yang sesuai.
+- Koreksi sesudah posting menggunakan reversal/correction yang mereferensikan dokumen asal; update langsung terhadap ledger, output Produksi, atau disposisi QC ditolak.
 
 ### 6.8 Keuangan dan akuntansi
 
@@ -994,7 +1179,8 @@ Analitik menggunakan view/materialized view agar transaksi sumber tetap menjadi 
 | View/tabel | Isi |
 |---|---|
 | `v_stock_position` | Stok on hand, reserved, available, karantina, dan dalam pengiriman per area gudang/item/lot |
-| `v_daily_sales` | Penjualan, transaksi, diskon, retur, dan metode bayar per kategori Agen 1/Agen 2 per hari |
+| `v_daily_sales` | Penjualan, transaksi, diskon, retur, dan metode bayar per kategori Agen 1/Agen 2 per hari, dengan dimensi kategori/tipe/varian/SKU Barang Jadi |
+| `v_finished_product_sales_mix` | Kuantitas, omzet, harga pokok, dan margin per kategori, tipe, varian, dan SKU Barang Jadi |
 | `v_production_performance` | Target, hasil baik, waste, durasi, biaya per batch/produk |
 | `v_qc_performance` | Lulus, hold, reject, ketidaksesuaian per sumber/produk/supplier |
 | `v_purchase_performance` | Nilai, ketepatan waktu/jumlah, harga, penolakan per supplier |
@@ -1014,6 +1200,11 @@ erDiagram
     CUSTOMER_CATEGORIES ||--o{ PRODUCT_PRICES : menentukan
     ITEMS ||--o| MATERIALS : merinci
     ITEMS ||--o| FINISHED_PRODUCTS : merinci
+    FINISHED_PRODUCT_CATEGORIES ||--o{ FINISHED_PRODUCT_TYPES : memiliki
+    FINISHED_PRODUCT_CATEGORIES ||--o{ FINISHED_PRODUCTS : mengelompokkan
+    FINISHED_PRODUCT_TYPES ||--o{ FINISHED_PRODUCT_VARIANTS : memiliki
+    FINISHED_PRODUCT_TYPES ||--o{ FINISHED_PRODUCTS : mengetikkan
+    FINISHED_PRODUCT_VARIANTS ||--o{ FINISHED_PRODUCTS : memvariasikan
     FINISHED_PRODUCTS ||--o{ PRODUCT_PRICES : memiliki
     ITEMS ||--o{ INVENTORY_LOTS : memiliki
     MATERIALS ||--o{ RECIPE_ITEMS : digunakan
@@ -1110,17 +1301,17 @@ Task di bawah adalah urutan implementasi. Semua task fitur wajib mencakup migrat
 | Task | Pekerjaan | Output utama | Dependensi |
 |---|---|---|---|
 | TSK-010 | CRUD profil satu pusat, area gudang internal, dan kode dokumen | Struktur operasional pusat Roti Hanan | TSK-007 |
-| TSK-011 | CRUD Master Barang/Bahan dan Barang Jadi yang terpisah; satuan beli/stok, konversi, harga beli, umur simpan, stok minimum, berat, QC, dan status; tanpa barcode | Dua master item siap transaksi dengan registri inventori bersama | TSK-010, TSK-007 |
+| TSK-011 | CRUD Master Barang/Bahan dan Barang Jadi yang terpisah; CRUD hierarki kategori/tipe/varian; pilihan bertingkat; satu SKU per kombinasi; validasi satuan Box untuk Roti Box; jumlah isi opsional; satuan beli/stok, konversi, harga beli, umur simpan, stok minimum, berat, QC, dan status; tanpa barcode | Dua master item dan klasifikasi Barang Jadi siap transaksi dengan registri inventori bersama | TSK-010, TSK-007 |
 | TSK-012 | CRUD pelanggan dalam tab Agen 1/Agen 2, supplier berkode, dua harga kategori tanpa harga umum, kontak, kota, tempo hari, batas kredit, catatan, status, dan hak edit per bagian | Master pihak dan harga B2B siap digunakan | TSK-010, TSK-007 |
-| TSK-013 | Import template CSV/spreadsheet terpisah untuk Barang/Bahan, Barang Jadi, supplier, Agen 1, Agen 2, harga kategori, dan area gudang | Migrasi master awal terkontrol | TSK-011, TSK-012 |
-| TSK-014 | CRUD resep berversi, bahan, langkah, output, toleransi, dan approval | Master produksi siap | TSK-011, TSK-009 |
+| TSK-013 | Import template CSV/spreadsheet terpisah untuk Barang/Bahan, kategori/tipe/varian Barang Jadi, SKU Barang Jadi, supplier, Agen 1, Agen 2, harga kategori, dan area gudang | Migrasi master awal terkontrol | TSK-011, TSK-012 |
+| TSK-014 | Buat menu **Master Data → Resep Produksi** untuk CRUD resep/BOM berversi per SKU, bahan, komponen kemasan, output standar, langkah, toleransi, workflow review/approval, tanggal efektif, audit, dan pembatasan formula sensitif | Master Resep menjadi sumber kebenaran yang siap digunakan Produksi; QC dapat meninjau tanpa mengubah formula; perbedaan kemasan Reguler/Mini tercatat | TSK-011, TSK-009 |
 
 ### Milestone 2 — Inventori dan purchasing
 
 | Task | Pekerjaan | Output utama | Dependensi |
 |---|---|---|---|
-| TSK-020 | Buat ledger pergerakan stok, lot, saldo terawat server, reservation, dan aturan stok negatif | Sumber kebenaran inventori | TSK-011 |
-| TSK-021 | Buat tampilan posisi stok per area internal, batch, kondisi, FEFO, dan pencarian lot | Stok pusat dapat dipantau per area | TSK-020 |
+| TSK-020 | Buat ledger bersama Bahan Baku, Kemasan, dan Barang Jadi; lot, saldo terawat server, reservation, tipe area gudang, transaksi pembalik, dan aturan stok negatif | Sumber kebenaran inventori lintas Gudang, Produksi, dan QC | TSK-011 |
+| TSK-021 | Buat tampilan posisi stok per item/area internal, batch, kondisi, FEFO, antrean permintaan Produksi, staging, karantina QC, rework, dan pencarian lot | Stok pusat dan permintaan Produksi dapat dipantau per area/status | TSK-020 |
 | TSK-022 | Implementasi purchase request dan saran kebutuhan bahan | Kebutuhan pengadaan terhubung stok | TSK-020 |
 | TSK-023 | Implementasi quotation supplier dan layar perbandingan | Pemilihan supplier terdokumentasi | TSK-012, TSK-022 |
 | TSK-024 | Implementasi purchase order, approval, revisi, dan pemantauan kedatangan | PO dapat dikendalikan | TSK-009, TSK-022 |
@@ -1136,11 +1327,11 @@ Task di bawah adalah urutan implementasi. Semua task fitur wajib mencakup migrat
 |---|---|---|---|
 | TSK-030 | Buat perhitungan kebutuhan produksi dari pesanan Agen 1/Agen 2, stok pusat, dan target | Saran rencana produksi | TSK-014, TSK-020 |
 | TSK-031 | Implementasi rencana dan perintah produksi per batch | Jadwal dan target produksi | TSK-030 |
-| TSK-032 | Implementasi reservation dan pengeluaran bahan per lot/FEFO | Bahan dapat ditelusuri ke batch | TSK-020, TSK-031 |
+| TSK-032 | Implementasi hitung kebutuhan standar dari snapshot resep/target, formulir permintaan bersatuan, keputusan/tunda Gudang, pemeriksaan stok lulus QC, kekurangan, eskalasi ke Purchasing, persetujuan lot/FEFO, dan konfirmasi serah-terima Produksi/QC | Permintaan, keputusan, pembelian, pengurangan stok, dan asal lot dapat ditelusuri ke batch | TSK-014, TSK-020, TSK-031 |
 | TSK-033 | Implementasi pencatatan langkah, waktu, suhu, petugas, mesin, dan kendala | Catatan pelaksanaan produksi | TSK-031 |
-| TSK-034 | Implementasi hasil baik, rework, gagal, susut, sisa kembali, dan output lot | Hasil dan waste akurat | TSK-032, TSK-033 |
+| TSK-034 | Implementasi form laporan Produksi untuk jumlah berhasil, gagal/waste, alasan, dan catatan; finalisasi atomik/idempotent otomatis mengonsumsi seluruh bahan yang diserahterimakan dan membuat output berhasil di karantina QC tanpa input/pengembalian sisa | Sumber angka hasil/waste jelas, pekerjaan ganda sisa bahan dihilangkan, dan output belum dapat dijual sebelum QC | TSK-032, TSK-033 |
 | TSK-035 | Buat template QC berversi untuk incoming, proses, final, dan sanitasi | Standar pemeriksaan dapat dikonfigurasi | TSK-014 |
-| TSK-036 | Implementasi QC proses dan produk jadi beserta hold/rework/reject/release | Produk dijual hanya setelah lulus | TSK-034, TSK-035 |
+| TSK-036 | Implementasi QC proses dan produk jadi, kuantitas lulus/hold/rework/reject, validasi total disposisi, pergerakan stok dari karantina, tindak lanjut rework, serta larangan QC mengubah hasil Produksi | Hanya kuantitas yang lulus QC menjadi stok siap jual | TSK-034, TSK-035 |
 | TSK-037 | Implementasi ketidaksesuaian, tindakan perbaikan, bukti, PIC, dan deadline | Masalah kualitas dapat diselesaikan | TSK-036, TSK-009 |
 | TSK-038 | Implementasi trace batch dan workflow blokir/recall | Penelusuran bahan sampai pesanan dan agen penerima | TSK-026, TSK-032, TSK-036 |
 | TSK-039 | Buat laporan target vs aktual, yield, waste, durasi, dan hasil QC | Pantauan produksi/QC | TSK-034, TSK-036 |
@@ -1191,7 +1382,7 @@ Task di bawah adalah urutan implementasi. Semua task fitur wajib mencakup migrat
 
 | Task | Pekerjaan | Output utama | Dependensi |
 |---|---|---|---|
-| TSK-070 | Buat view analitik dan snapshot harian dengan filter periode/kategori Agen 1-Agen 2 | Sumber data dashboard efisien | Modul sumber selesai |
+| TSK-070 | Buat view analitik dan snapshot harian dengan filter periode, kategori Agen 1/Agen 2, serta kategori/tipe/varian/SKU Barang Jadi | Sumber data dashboard efisien | Modul sumber selesai |
 | TSK-071 | Implementasi dashboard Owner dengan drill-down ke transaksi | Pusat kendali Bapak Asep | TSK-070 |
 | TSK-072 | Implementasi dashboard Admin Penjualan/Sales, Gudang, Produksi, QC, Purchasing, HR/Finance | Beranda kerja per role | TSK-070 |
 | TSK-073 | Implementasi alert engine dan notifikasi realtime/terjadwal | Pengecualian menjadi tindakan | TSK-009, TSK-029, TSK-070 |
@@ -1256,6 +1447,20 @@ MVP dinyatakan siap pilot apabila:
 25. Transaksi kredit memeriksa tempo, piutang terbuka, dan sisa batas kredit sebelum diselesaikan.
 26. Barang wajib QC menambah on-hand karantina tetapi tidak available sebelum lulus; seluruh Barang Jadi wajib lulus QC akhir sebelum dijual.
 27. Master yang telah dipakai transaksi tidak dapat dihapus permanen dan setiap perubahan sensitif tercatat pada audit log.
+28. Master Barang Jadi menyediakan hierarki yang dapat dikelola: kategori Roti Black Forest yang saat ini tidak mempunyai tipe/varian, serta kategori Roti Box dengan tipe Reguler, Mix, Ekonomis, dan Mini.
+29. Reguler dan Mini menampilkan 16 nama varian awal yang sama sebagai record anak dari tipe masing-masing; setiap kombinasi tersimpan sebagai SKU berbeda dengan harga, stok, resep/BOM, dan histori masing-masing, serta perbedaan komponen kemasannya dapat dicatat.
+30. Mix menampilkan tepat enam varian awal—3D, Asin, Manis, Asin Manis, Sweet, dan Sweet G—dan 3D mempunyai deskripsi kombinasi cokelat, keju, dan kacang melimpah di luar dan dalam roti.
+31. Form hanya menampilkan tipe milik kategori dan varian milik tipe terpilih serta menolak kombinasi duplikat; kategori Roti Black Forest dapat disimpan tanpa tipe/varian pada struktur awal.
+32. Owner atau Staff Produksi dapat menambah, mengubah, mengurutkan, dan menonaktifkan kategori, tipe, serta varian tanpa deployment; data terpakai tidak dapat dihapus permanen.
+33. Seluruh SKU Roti Box aktif menggunakan satuan jual/stok Box. Jumlah roti per box boleh kosong sampai diketahui dan dapat dilengkapi kemudian tanpa mengubah histori transaksi.
+34. Master Barang/Bahan menyediakan Bahan Baku dan Kemasan lengkap dengan satuan stok, lot, kedaluwarsa, status QC, saldo per area, serta riwayat pergerakan; modul Produksi dan QC membaca sumber inventori yang sama.
+35. Resep/BOM dikelola per SKU dan versi melalui **Master Data → Resep Produksi**; role pembuat dapat membuat/revisi/mengajukan, QC dapat review/approval sesuai hak, Produksi hanya menggunakan versi aktif, dan batch lama tetap memakai snapshot versi yang tersimpan.
+36. Untuk target 600 Box dari resep standar 100 Box yang membutuhkan 10 Kg bahan, sistem menghitung kebutuhan standar 60 Kg, menyimpan snapshot, dan mengirim permintaan 60 Kg ke Gudang tanpa mengubah stok.
+37. Gudang dapat menyetujui atau menunda permintaan dengan hitung mundur. Kekurangan dapat diteruskan ke Purchasing. Persetujuan Gudang belum mengurangi stok; stok baru berkurang setelah Produksi/QC mengonfirmasi serah-terima.
+38. Form laporan Produksi hanya mewajibkan jumlah berhasil dan gagal/waste, alasan ketika ada kegagalan, serta catatan opsional. Tampilan seperti `584 / 16` berasal dari input Produksi 584 berhasil dan 16 gagal, dapat ditelusuri ke user/waktu, dan tidak dapat diubah QC.
+39. Finalisasi batch atomik/idempotent mengonsumsi seluruh bahan yang telah diserahterimakan, mencatat waste, menolak stok negatif, serta menambah output berhasil ke karantina QC dengan `available = 0`; tidak ada input atau pengembalian sisa bahan.
+40. QC wajib membagi jumlah berhasil yang diperiksa menjadi kuantitas lulus, ditahan, rework, atau ditolak dengan total yang sama; hanya kuantitas lulus berpindah menjadi stok produk jadi siap jual.
+41. Traceability membuktikan dokumen permintaan, keputusan Gudang, permintaan pembelian, lot Bahan Baku/Kemasan, konfirmasi serah-terima, batch, versi resep, output berhasil/gagal, disposisi QC, lot Barang Jadi, dan transaksi tujuan dapat ditelusuri dua arah.
 
 ### Definition of Done per fitur
 
@@ -1282,9 +1487,10 @@ Data berikut harus dibersihkan sebelum go-live:
 
 - Profil satu pusat Bandung dan daftar area gudang internal.
 - Master Barang/Bahan: kode, jenis Bahan Baku/Kemasan, satuan beli/stok, nilai konversi, harga beli, stok minimum, umur simpan, persyaratan QC, dan status.
-- Master Barang Jadi: kode, jenis produk, satuan jual/stok, berat, umur simpan, Harga Agen 1, Harga Agen 2, stok minimum, dan status; tanpa barcode dan tanpa harga umum.
-- Resep serta hasil standar.
-- Stok awal per area gudang dan batch/kedaluwarsa.
+- Klasifikasi Barang Jadi: kategori, tipe di bawah kategori, varian di bawah tipe, deskripsi, urutan, dan status. Data awal mengikuti struktur Roti Black Forest dan Roti Box yang telah dikonfirmasi.
+- Master SKU Barang Jadi: kode, nama, kategori, tipe, varian, satuan jual/stok, jumlah isi opsional, berat, umur simpan, Harga Agen 1, Harga Agen 2, stok minimum, komponen kemasan, dan status; tanpa barcode dan tanpa harga umum. Seluruh Roti Box menggunakan satuan Box, sedangkan jumlah roti per box tidak diisi dengan asumsi.
+- Master Resep Produksi awal per SKU dan versi: output standar, Bahan Baku, Kemasan, kuantitas satuan stok, toleransi, langkah, status review/approval, serta tanggal efektif.
+- Stok awal Bahan Baku, Kemasan, dan Barang Jadi per area gudang, lot, batch/kedaluwarsa, dan status QC; termasuk pemetaan area staging/produksi, karantina QC, rework, dan ditolak.
 - Supplier berkode unik, kontak, alamat, kota, termin hari, catatan, status, harga beli, dan saldo utang.
 - Pelanggan yang dipisahkan dalam Agen 1/Agen 2, kontak, alamat, kota, tempo hari, batas kredit, catatan, status, dua harga kategori, dan saldo piutang.
 - Kas/bank dan kelompok akun.
@@ -1314,7 +1520,9 @@ Saldo awal harus disetujui Bapak Asep sebelum production dibuka.
 
 | Risiko | Dampak | Mitigasi |
 |---|---|---|
-| Data barang/resep/satuan atau konversi tidak rapi | Stok dan biaya salah | Template import terpisah, validasi konversi, uji contoh pembelian, pemilik field per role, approval sebelum import |
+| Data klasifikasi Barang Jadi, SKU, resep, kemasan, satuan, atau konversi tidak rapi | Stok, harga, produksi, dan biaya salah | Template import terpisah, validasi kombinasi kategori/tipe/varian, validasi konversi, uji contoh pembelian/produksi, pemilik field per role, approval sebelum import |
+| Pemakaian bahan atau hasil berhasil/gagal diinput tidak sesuai kondisi fisik | Saldo bahan, yield, waste, harga pokok, dan hasil QC tidak dapat dipercaya | Wajib input per lot, rekonsiliasi issued = used + returned, alasan deviasi/gagal, identitas pelapor, review pengecualian, serta koreksi melalui pembalik |
+| Hasil berhasil langsung dianggap siap jual sebelum QC | Produk belum lulus mutu dapat terjual dan traceability terputus | Output selalu masuk karantina dengan available nol; hanya disposisi PASS QC yang memindahkan kuantitas ke area Produk Jadi |
 | Pesanan WhatsApp/telepon terlambat dimasukkan | Rencana produksi dan alokasi stok tidak akurat | Admin Penjualan/Sales wajib input pada hari yang sama, daftar pesanan belum masuk, dan rekonsiliasi harian |
 | Konfirmasi penerimaan agen terlambat | Stok dalam pengiriman, penjualan, dan piutang belum final | Daftar pengiriman terbuka, bukti penerimaan wajib, reminder, dan eskalasi berdasarkan umur pengiriman |
 | Harga Agen 1/Agen 2 atau tanggal efektif tidak terpelihara | POS salah harga dan margin sulit dipercaya | Wajib dua harga aktif, validasi sebelum produk dijual, snapshot harga transaksi, audit perubahan, dan pembatasan role |
@@ -1366,9 +1574,17 @@ Saldo awal harus disetujui Bapak Asep sebelum production dibuka.
 | Q25 | Tempo pembayaran | Disimpan sebagai jumlah hari; `0` berarti tunai. |
 | Q26 | Batas kredit | Menggunakan satu nilai Batas Kredit sebagai maksimum hutang/piutang terbuka pelanggan. |
 | Q27 | Satuan Barang Jadi | Satuan stok sama dengan satuan jual. |
-| Q28 | Halaman Master Data | Pelanggan, Supplier, Barang/Bahan, dan Barang Jadi terpisah; mendukung tambah, lihat, ubah, cari, filter status, dan nonaktifkan. |
+| Q28 | Halaman Master Data | Pelanggan, Supplier, Barang/Bahan, Barang Jadi, dan Resep Produksi disajikan terpisah; mendukung tambah, lihat, ubah, cari, filter status, dan nonaktifkan sesuai hak role. |
 | Q29 | Akses Master Data | Setiap role mendapat menu Master Data dan mengelola bagian/field sesuai tanggung jawabnya pada sumber data bersama. |
 | Q30 | QC produk jadi | Barang Jadi belum menjadi stok siap jual sebelum lulus QC akhir. |
+| Q44 | Apakah hierarki Kategori → Tipe → Varian sudah benar? | **Ya.** Tipe berada di bawah kategori dan varian berada di bawah tipe. |
+| Q45 | Apakah setiap kombinasi akhir menjadi SKU tersendiri? | **Ya.** Setiap kombinasi mempunyai kode, harga, stok, produksi, resep/BOM, QC, dan histori sendiri. |
+| Q46 | Apa perbedaan Roti Box Mini dengan Reguler pada varian rasa yang sama? | Hanya **kemasan**; keduanya tetap merupakan SKU berbeda. |
+| Q47 | Apa satuan jual/stok Roti Box dan berapa jumlah roti per box? | Satuan jual dan stoknya adalah **Box**. Jumlah roti per box belum diketahui, sehingga field jumlah isi bersifat opsional dan dapat dilengkapi kemudian. |
+| Q48 | Apa arti 3D, Asin, Manis, Asin Manis, Sweet, dan Sweet G? | Semuanya adalah varian langsung pada Roti Box tipe Mix. `3D` menggabungkan cokelat, keju, dan kacang melimpah di luar dan dalam roti. |
+| Q49 | Apakah Roti Black Forest mempunyai varian? | **Tidak.** Roti Black Forest merupakan satu produk saja. |
+| Q50 | Apakah Harga Agen 1 dan Harga Agen 2 ditetapkan per SKU? | **Ya.** Setiap kombinasi SKU mempunyai kedua harga tersebut. |
+| Q51 | Apakah kategori, tipe, dan varian dapat dikelola dari Master Data? | **Ya.** Role berwenang dapat mengelolanya tanpa perubahan kode aplikasi. |
 
 ### 12.2 Pertanyaan lanjutan yang wajib dijawab sebelum task terkait
 
@@ -1381,6 +1597,12 @@ Q31: [jawaban]
 Q32: [jawaban]
 Q33: [jawaban]
 ...
+Q52: [jawaban]
+Q53: [jawaban]
+Q54: [jawaban]
+Q55: [jawaban]
+Q56: [jawaban]
+Q57: [jawaban]
 ```
 
 | No. | Pertanyaan | Jawaban/asumsi saat ini | Mempengaruhi |
@@ -1398,6 +1620,12 @@ Q33: [jawaban]
 | Q41 | Apakah nomor batch internal sudah digunakan dan bagaimana formatnya? | Nomor batch tetap wajib untuk traceability; barcode tidak digunakan | Label dan traceability |
 | Q42 | Dokumen lama apa yang perlu dipindahkan: stok, penjualan, utang/piutang, pelanggan, karyawan, atau semuanya? | Master dan saldo awal wajib; histori transaksi opsional | Migrasi dan timeline |
 | Q43 | Apakah struk, invoice, dan surat jalan perlu memakai logo, alamat, nomor kontak, serta format khusus Roti Hanan? | Ya, template branding disiapkan; aset dan format final diperlukan | Dokumen cetak/digital |
+| Q52 | Apa satuan jual dan satuan stok untuk Roti Black Forest? | Belum dikonfirmasi; tidak boleh ditebak atau di-hardcode dan wajib diisi sebelum SKU Roti Black Forest diaktifkan | Master SKU, stok, produksi, harga, POS, dan dokumen |
+| Q53 | Apakah perlu menghitung sisa atau deviasi pemakaian aktual bahan per batch? | Tidak. Seluruh bahan yang telah dikonfirmasi diterima dianggap digunakan; tidak ada input sisa atau pengembalian ke Gudang agar tidak menimbulkan pekerjaan ganda | Finalisasi produksi, biaya, audit |
+| Q54 | Apa daftar alasan baku untuk gagal/waste produksi, misalnya gosong, bentuk tidak sesuai, adonan gagal, kontaminasi, kemasan rusak, atau lainnya? | Kode alasan dibuat configurable; daftar awal perlu dikonfirmasi agar laporan waste konsisten | Form hasil Produksi, laporan waste, tindakan perbaikan |
+| Q55 | Apakah rework harus membuat perintah/batch rework baru atau tetap menjadi siklus pada batch asal? | PRD mewajibkan referensi tindak lanjut dan QC ulang; model batch final perlu keputusan operasional | Produksi rework, lot, biaya, traceability, QC ulang |
+| Q56 | Apa nama fisik area Gudang yang akan dipakai untuk Bahan Baku, Kemasan, Staging/Produksi, Karantina QC, Rework, Produk Jadi, dan Ditolak? | Tipe area sudah tetap; kode/nama ruangan aktual dikonfirmasi saat setup data | Master area, saldo awal, perpindahan stok, label |
+| Q57 | Siapa pemegang keputusan akhir untuk mengaktifkan versi Master Resep: QC Inspector atau Owner setelah review QC? | PRD menetapkan Staff Produksi sebagai pembuat/revisi dan QC sebagai reviewer; hak aktivasi akhir perlu dikonfirmasi agar workflow dan RLS tidak di-hardcode keliru | Master Resep, approval, hak akses, audit, aktivasi batch produksi |
 
 ---
 
@@ -1416,6 +1644,19 @@ Q33: [jawaban]
 - Supplier mempunyai kode unik serta data nama, kontak, HP, alamat, kota, tempo hari, catatan, dan status aktif.
 - Master **Barang/Bahan** hanya terdiri dari Bahan Baku dan Kemasan serta terpisah dari Master **Barang Jadi**.
 - Barang/Bahan memakai satuan beli, satuan stok, nilai konversi, dan harga beli per satuan beli; saldo selalu disimpan dalam satuan stok.
+- Inventori/Gudang merupakan sumber kebenaran saldo Bahan Baku, Kemasan, dan Barang Jadi. Produksi dan QC membuat pergerakan terhadap ledger yang sama dan tidak menyimpan saldo stok mandiri.
+- Resep/BOM dibuat per SKU dan versi melalui **Master Data → Resep Produksi**. Role pembuat mengelola formula, QC meninjau/menyetujui sesuai hak, dan modul Produksi hanya memakai versi aktif secara read-only.
+- Kebutuhan standar bahan dihitung proporsional dari target dan output standar resep, lalu dikirim sebagai formulir permintaan bersatuan kepada Gudang tanpa mengubah stok.
+- Gudang menyetujui/menunda permintaan, meneruskan kekurangan ke Purchasing, dan menyiapkan lot/FEFO. Stok baru berkurang setelah Produksi/QC mengonfirmasi serah-terima.
+- Staff Produksi menjadi sumber resmi jumlah berhasil dan gagal/waste. Form laporan tidak meminta pemakaian aktual atau sisa bahan, dan QC tidak dapat mengubah angka hasil Produksi.
+- Finalisasi Produksi memposting konsumsi seluruh bahan yang diserahterimakan, waste, biaya, dan output berhasil secara atomik/idempotent tanpa pengembalian sisa. Output berhasil masuk karantina QC dan belum tersedia untuk dijual.
+- QC membagi kuantitas berhasil yang diperiksa menjadi lulus, ditahan, rework, atau ditolak. Hanya kuantitas lulus yang berpindah menjadi stok Barang Jadi siap jual.
+- Klasifikasi Barang Jadi menggunakan **Kategori → Tipe → Varian** dan dapat dikelola oleh Owner/Staff Produksi melalui Master Data tanpa perubahan kode aplikasi. Setiap tipe merupakan anak dari satu kategori dan setiap varian merupakan anak dari satu tipe.
+- Struktur awal terdiri dari kategori **Roti Black Forest** yang saat ini tidak mempunyai tipe/varian serta kategori **Roti Box** dengan tipe **Reguler**, **Mix**, **Ekonomis**, dan **Mini**.
+- Reguler mempunyai 16 varian awal; Mini mempunyai 16 nama varian awal yang sama sebagai record di bawah tipe Mini, tetapi setiap kombinasi Mini dan Reguler merupakan SKU berbeda dan hanya berbeda pada kemasan.
+- Mix mempunyai varian **3D, Asin, Manis, Asin Manis, Sweet, dan Sweet G**. Varian 3D menggabungkan cokelat, keju, dan kacang melimpah pada bagian luar dan dalam roti.
+- Setiap kombinasi akhir kategori/tipe/varian merupakan SKU Barang Jadi tersendiri dengan Harga Agen 1, Harga Agen 2, stok, resep/BOM, QC, dan histori masing-masing.
+- Seluruh SKU Roti Box dihitung, disimpan, diberi harga, dan dijual dalam satuan **Box**. Jumlah roti per box belum diketahui, sehingga field jumlah isi bersifat opsional dan dapat diisi kemudian. Satuan Roti Black Forest masih perlu dikonfirmasi sebelum SKU-nya diaktifkan.
 - Satuan stok Barang Jadi sama dengan satuan jual.
 - Barcode produk tidak digunakan pada rilis awal; pencarian memakai kode atau nama.
 - Tempo pembayaran disimpan dalam jumlah hari dan nilai `0` berarti tunai.

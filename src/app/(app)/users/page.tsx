@@ -33,7 +33,7 @@ import { formatDateTime } from "@/lib/format";
 import type { AppUser, Role } from "@/lib/types";
 import { useERPStore } from "@/store/use-erp-store";
 
-const allRoles: Role[] = ["Owner", "Admin Penjualan/Sales", "Staff Gudang", "Staff Produksi", "QC Inspector", "Staff Purchasing", "Admin HR/Finance"];
+const allRoles: Role[] = ["Owner", "Admin Penjualan/Sales", "Staff Gudang", "Staff Produksi", "Staff Purchasing", "Admin HR/Finance"];
 
 export default function UsersPage() {
   const { role: currentRole } = useCurrentAccess();
@@ -106,13 +106,13 @@ export default function UsersPage() {
       />
 
       <MetricStrip items={[
-        { label: "Total akun", value: String(users.length), detail: "Termasuk Owner", trend: "neutral", icon: <People24Regular />, onClick: () => setUserView("all") },
-        { label: "Akun aktif", value: String(users.filter((user) => user.isActive).length), detail: "Dapat masuk ke aplikasi", trend: "up", icon: <PersonAvailable24Regular />, onClick: () => setUserView("active") },
-        { label: "Belum pernah masuk", value: String(users.filter((user) => !user.lastLogin).length), detail: "Perlu aktivasi oleh pengguna", trend: "neutral", icon: <Key24Regular />, onClick: () => setUserView("never") },
-        { label: "Role terisi", value: String(new Set(users.map((user) => user.role)).size), detail: "Dari 7 role yang tersedia", trend: "neutral", icon: <CheckmarkCircle24Regular />, onClick: () => document.getElementById("access-rules")?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+        { label: "Total akun", value: String(users.length), detail: "Termasuk Owner", trend: "neutral", icon: <People24Regular />, onClick: () => setUserView("all"), targetId: "users-list" },
+        { label: "Akun aktif", value: String(users.filter((user) => user.isActive).length), detail: "Dapat masuk ke aplikasi", trend: "up", icon: <PersonAvailable24Regular />, onClick: () => setUserView("active"), targetId: "users-list" },
+        { label: "Belum pernah masuk", value: String(users.filter((user) => !user.lastLogin).length), detail: "Perlu aktivasi oleh pengguna", trend: "neutral", icon: <Key24Regular />, onClick: () => setUserView("never"), targetId: "users-list" },
+        { label: "Role terisi", value: String(new Set(users.map((user) => user.role)).size), detail: "Dari 6 role yang tersedia", trend: "neutral", icon: <CheckmarkCircle24Regular />, onClick: () => undefined, targetId: "access-rules" },
       ]} />
 
-      <SectionPanel title={userView === "active" ? "Akun aktif" : userView === "never" ? "Belum pernah masuk" : "Daftar akun"} description="Setiap pengguna hanya memiliki satu role. Password tetap milik masing-masing akun." noPadding>
+      <SectionPanel id="users-list" title={userView === "active" ? "Akun aktif" : userView === "never" ? "Belum pernah masuk" : "Daftar akun"} description="Setiap pengguna hanya memiliki satu role. Password tetap milik masing-masing akun." noPadding>
         <DataTable data={visibleUsers} columns={columns} searchPlaceholder="Cari nama, Gmail, username, atau role..." />
       </SectionPanel>
 
@@ -120,12 +120,12 @@ export default function UsersPage() {
       <SectionPanel title="Aturan akses ringkas" description="Menu yang terlihat mengikuti role aktif pengguna.">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {[
-            ["Owner", "Semua modul, persetujuan, analitik, dan pengguna"],
+            ["Owner", "Semua modul operasional, analitik, dan pengguna"],
             ["Admin Penjualan/Sales", "Pesanan agen, POS pusat, pembayaran, dan shift POS"],
-            ["Gudang & Produksi", "Stok internal, pemenuhan agen, produksi, dan QC sesuai role"],
+            ["Staff Gudang", "Gudang Bahan, Gudang Produk Jadi, pemenuhan agen, dan stok opname"],
+            ["Staff Produksi", "Batch manual, permintaan bahan, serta pencatatan hasil berhasil dan gagal"],
             ["Purchasing", "Kebutuhan bahan, supplier, PO, dan penerimaan"],
             ["Admin HR/Finance", "Keuangan, HR, payroll, analitik, dan akun selain Owner"],
-            ["QC Inspector", "Pemeriksaan mutu, hold, lulus, tolak, dan ketertelusuran"],
           ].map(([title, description]) => <article key={title} className="rounded-xl border border-[var(--app-border)] p-4"><p className="text-sm font-semibold">{title}</p><p className="mt-2 text-xs leading-5 text-[var(--app-text-muted)]">{description}</p></article>)}
         </div>
       </SectionPanel>

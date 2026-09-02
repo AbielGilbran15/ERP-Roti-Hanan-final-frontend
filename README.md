@@ -24,10 +24,10 @@ Semua akun menggunakan password `hanan123`.
 | Role | Username |
 | --- | --- |
 | Owner | `asep` |
-| Kasir | `kasir.dago` |
+| Admin Penjualan/Sales | `sales.pusat` |
 | Staff Gudang | `gudang.pusat` |
 | Staff Produksi | `produksi.pusat` |
-| QC Inspector | `qc.pusat` |
+| Staff Produksi tambahan | `produksi.fikri` |
 | Staff Purchasing | `purchasing.pusat` |
 | Admin HR/Finance | `siti.finance` |
 
@@ -36,13 +36,13 @@ Login juga menerima Gmail yang tercantum di data dummy.
 ## Cakupan frontend
 
 - Penjualan, POS, pre-order, pembayaran, shift kasir, dan riwayat
-- Inventori per lot, FEFO, permintaan cabang, transfer, dan stok opname
-- Produksi per batch, resep, waste, QC, hold, dan ketertelusuran
-- Purchasing, saran kebutuhan, perbandingan supplier, PO, dan penerimaan
+- Inventori terpisah antara Gudang Bahan dan Gudang Produk Jadi, per lot, FEFO, transfer, dan stok opname
+- Reservasi stok untuk pesanan agen serta validasi penjualan langsung agar stok tidak pernah minus
+- Produksi per batch dengan permintaan bahan manual, hasil multi-SKU, hasil berhasil, waste, dan ketertelusuran pesanan–batch
+- Purchasing, saran kebutuhan bahan, perbandingan supplier, PO langsung, dan penerimaan ke Gudang Bahan
 - Keuangan, kas, utang-piutang, biaya, jurnal, dan arus kas
 - HR, karyawan, absensi, lembur, kontrak, pelatihan, dan payroll
-- Dashboard analitik dan temuan untuk pengambilan keputusan
-- Persetujuan Owner lintas modul
+- Dashboard dan analitik harian, mingguan, bulanan, tahunan, serta rentang tanggal khusus
 - Manajemen pengguna, role, lokasi, dan status akun
 - Tema terang/gelap serta layout mobile dan desktop
 

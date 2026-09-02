@@ -54,7 +54,6 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { role } = useCurrentAccess();
-  const pendingApprovalCount = useERPStore((state) => state.approvals.filter((item) => item.status === "Menunggu").length);
   const primary = role ? mainNavigation.filter((item) => item.roles.includes(role)) : [];
   const controls = role ? controlNavigation.filter((item) => item.roles.includes(role)) : [];
 
@@ -107,11 +106,6 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   >
                     <Icon className="size-5 shrink-0" />
                     <span className="truncate">{item.label}</span>
-                    {item.href === "/approvals" && pendingApprovalCount > 0 ? (
-                      <span className="ml-auto grid min-w-5 place-items-center rounded-md bg-amber-300 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-950">
-                        {pendingApprovalCount > 99 ? "99+" : pendingApprovalCount}
-                      </span>
-                    ) : null}
                   </Link>
                 );
               })}
@@ -210,7 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <div className="lg:pl-[268px]">
+      <div className="min-w-0 lg:pl-[268px]">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-[var(--app-border)] bg-[color:var(--app-surface)]/95 px-3 backdrop-blur md:px-5">
           <Button
             appearance="subtle"
@@ -357,7 +351,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1600px] p-4 md:p-6 xl:p-7">
+        <main id="main-content" tabIndex={-1} className="mx-auto min-w-0 w-full max-w-[1600px] p-4 md:p-6 xl:p-7">
           {allowed ? children : <AccessDenied />}
         </main>
       </div>

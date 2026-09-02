@@ -11,7 +11,16 @@ export type MetricItem = {
   icon?: ReactNode;
   href?: string;
   onClick?: () => void;
+  targetId?: string;
   actionLabel?: string;
+};
+
+const scrollToMetricTarget = (targetId: string) => {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 };
 
 export function MetricStrip({ items, className }: { items: MetricItem[]; className?: string }) {
@@ -53,13 +62,26 @@ export function MetricStrip({ items, className }: { items: MetricItem[]; classNa
           "min-w-0 bg-[var(--app-surface)] px-4 py-4 text-left md:px-5",
           interactive && "focus-ring transition-colors hover:bg-[var(--app-surface-2)]",
         );
-        const ariaLabel = item.actionLabel ?? `${item.label}: ${item.value}`;
+        const ariaLabel = item.actionLabel;
 
         if (item.href) {
           return <Link key={item.label} href={item.href} className={className} aria-label={ariaLabel}>{content}</Link>;
         }
         if (item.onClick) {
-          return <button key={item.label} type="button" className={className} onClick={item.onClick} aria-label={ariaLabel}>{content}</button>;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              className={className}
+              onClick={() => {
+                item.onClick?.();
+                if (item.targetId) scrollToMetricTarget(item.targetId);
+              }}
+              aria-label={ariaLabel}
+            >
+              {content}
+            </button>
+          );
         }
         return <div key={item.label} className={className}>{content}</div>;
       })}

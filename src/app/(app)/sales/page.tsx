@@ -39,10 +39,30 @@ import { useAppToast } from "@/components/ui/app-toast";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
 import { canPerformAction } from "@/lib/access";
 import { defaultNeededAt, localDateKey } from "@/lib/date";
-import type { Customer, OrderSource, Product, Sale, SalesShift } from "@/lib/types";
+import { postedSaleDateKey } from "@/lib/finance";
+import type {
+  Customer,
+  FinishedProductCategory,
+  FinishedProductTypeDefinition,
+  FinishedProductVariant,
+  OrderSource,
+  Product,
+  Sale,
+  SalesReturnCondition,
+  SalesShift,
+} from "@/lib/types";
 import { useCurrentAccess } from "@/hooks/use-current-access";
+import { useMetricSection } from "@/hooks/use-metric-section";
 import { getUnitDefinition } from "@/lib/units";
 import { useERPStore } from "@/store/use-erp-store";
+
+const salesMetricSections = {
+  "sales-pos": "pos",
+  "sales-orders": "orders",
+  "sales-history": "history",
+  "sales-returns": "returns",
+  "sales-shift": "shift",
+} as const;
 
 const customerPrice = (products: Product[], productId: string, customer?: Customer) => {
   const product = products.find((item) => item.id === productId);
@@ -50,11 +70,103 @@ const customerPrice = (products: Product[], productId: string, customer?: Custom
   return customer?.category === "Agen 1" ? product.agent1Price : product.agent2Price;
 };
 
+type ProductFilters = {
+  categoryId: string;
+  typeId: string;
+  variantId: string;
+};
+
+const emptyProductFilters: ProductFilters = { categoryId: "", typeId: "", variantId: "" };
+
+const filterFinishedProducts = (products: Product[], search: string, filters: ProductFilters) => {
+  const normalizedSearch = search.trim().toLocaleLowerCase("id");
+  return products.filter((product) =>
+    (!normalizedSearch || `${product.code} ${product.name}`.toLocaleLowerCase("id").includes(normalizedSearch)) &&
+    (!filters.categoryId || product.finishedProductCategoryId === filters.categoryId) &&
+    (!filters.typeId || product.finishedProductTypeId === filters.typeId) &&
+    (!filters.variantId || product.finishedProductVariantId === filters.variantId));
+};
+
+function ProductSearchFilters({
+  search,
+  onSearchChange,
+  filters,
+  onFiltersChange,
+  products,
+  categories,
+  types,
+  variants,
+  compact = false,
+}: {
+  search: string;
+  onSearchChange: (value: string) => void;
+  filters: ProductFilters;
+  onFiltersChange: (value: ProductFilters) => void;
+  products: Product[];
+  categories: FinishedProductCategory[];
+  types: FinishedProductTypeDefinition[];
+  variants: FinishedProductVariant[];
+  compact?: boolean;
+}) {
+  const productCategoryIds = new Set(products.map((product) => product.finishedProductCategoryId).filter(Boolean));
+  const productTypeIds = new Set(products
+    .filter((product) => !filters.categoryId || product.finishedProductCategoryId === filters.categoryId)
+    .map((product) => product.finishedProductTypeId)
+    .filter(Boolean));
+  const productVariantIds = new Set(products
+    .filter((product) => (!filters.categoryId || product.finishedProductCategoryId === filters.categoryId) && (!filters.typeId || product.finishedProductTypeId === filters.typeId))
+    .map((product) => product.finishedProductVariantId)
+    .filter(Boolean));
+  const categoryOptions = categories.filter((item) => item.isActive && productCategoryIds.has(item.id)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "id"));
+  const typeOptions = types.filter((item) => item.isActive && productTypeIds.has(item.id)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "id"));
+  const variantOptions = variants.filter((item) => item.isActive && productVariantIds.has(item.id)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "id"));
+
+  return (
+    <div className={compact ? "mb-3 space-y-2" : "mb-4 space-y-2.5"}>
+      <Input
+        value={search}
+        onChange={(_, data) => onSearchChange(data.value)}
+        contentBefore={<Search20Regular />}
+        placeholder="Cari kode atau nama produk..."
+        aria-label="Cari kode atau nama produk"
+        className="w-full"
+      />
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+        <Select
+          aria-label="Filter kategori produk"
+          value={filters.categoryId}
+          onChange={(event) => onFiltersChange({ categoryId: event.target.value, typeId: "", variantId: "" })}
+        >
+          <option value="">Semua kategori</option>
+          {categoryOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </Select>
+        <Select
+          aria-label="Filter tipe produk"
+          value={filters.typeId}
+          onChange={(event) => onFiltersChange({ ...filters, typeId: event.target.value, variantId: "" })}
+        >
+          <option value="">Semua tipe</option>
+          {typeOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </Select>
+        <Select
+          aria-label="Filter varian produk"
+          value={filters.variantId}
+          onChange={(event) => onFiltersChange({ ...filters, variantId: event.target.value })}
+        >
+          <option value="">Semua varian</option>
+          {variantOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </Select>
+      </div>
+    </div>
+  );
+}
+
 export default function SalesPage() {
   const router = useRouter();
   const { user, role } = useCurrentAccess();
   const [tab, setTab] = useState("pos");
   const [search, setSearch] = useState("");
+  const [productFilters, setProductFilters] = useState<ProductFilters>(emptyProductFilters);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [customerId, setCustomerId] = useState("cust-sari");
   const [discount, setDiscount] = useState("0");
@@ -62,6 +174,7 @@ export default function SalesPage() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [orderCustomerId, setOrderCustomerId] = useState("cust-koperasi");
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderProductFilters, setOrderProductFilters] = useState<ProductFilters>(emptyProductFilters);
   const [orderCart, setOrderCart] = useState<Record<string, number>>({});
   const [orderDiscount, setOrderDiscount] = useState("0");
   const [orderSource, setOrderSource] = useState<Exclude<OrderSource, "POS">>("WhatsApp");
@@ -71,6 +184,12 @@ export default function SalesPage() {
   const [neededAt, setNeededAt] = useState(defaultNeededAt);
   const [closeShiftId, setCloseShiftId] = useState<string | null>(null);
   const [actualCash, setActualCash] = useState("0");
+  const [openShiftDialog, setOpenShiftDialog] = useState(false);
+  const [openingCash, setOpeningCash] = useState("0");
+  const [returnSaleId, setReturnSaleId] = useState<string | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
+  const [returnConditions, setReturnConditions] = useState<Record<string, SalesReturnCondition>>({});
   const toast = useAppToast();
 
   const stocks = useERPStore((state) => state.stocks);
@@ -79,12 +198,20 @@ export default function SalesPage() {
   const salesShifts = useERPStore((state) => state.salesShifts);
   const users = useERPStore((state) => state.users);
   const products = useERPStore((state) => state.products);
+  const finishedProductCategories = useERPStore((state) => state.finishedProductCategories);
+  const finishedProductTypes = useERPStore((state) => state.finishedProductTypes);
+  const finishedProductVariants = useERPStore((state) => state.finishedProductVariants);
   const invoices = useERPStore((state) => state.invoices);
+  const salesReturns = useERPStore((state) => state.salesReturns);
   const addSale = useERPStore((state) => state.addSale);
   const addAgentOrder = useERPStore((state) => state.addAgentOrder);
+  const openSalesShift = useERPStore((state) => state.openSalesShift);
   const closeSalesShift = useERPStore((state) => state.closeSalesShift);
+  const createSalesReturn = useERPStore((state) => state.createSalesReturn);
   const canManageSales = canPerformAction(role, "sales.create");
   const canCloseShift = canPerformAction(role, "sales.shift.close");
+
+  useMetricSection(salesMetricSections, setTab);
 
   useEffect(() => {
     if (!canManageSales && tab === "pos") setTab("history");
@@ -92,12 +219,9 @@ export default function SalesPage() {
 
   const selectedCustomer = customers.find((item) => item.id === customerId);
   const orderCustomer = customers.find((item) => item.id === orderCustomerId);
-  const finishedProducts = products.filter(
-    (product) => product.type === "Produk Jadi" && product.isActive && `${product.code} ${product.name}`.toLowerCase().includes(search.toLowerCase()),
-  );
-  const orderProducts = products.filter(
-    (product) => product.type === "Produk Jadi" && product.isActive && `${product.code} ${product.name}`.toLowerCase().includes(orderSearch.toLowerCase()),
-  );
+  const activeFinishedProducts = products.filter((product) => product.type === "Produk Jadi" && product.isActive);
+  const finishedProducts = filterFinishedProducts(activeFinishedProducts, search, productFilters);
+  const orderProducts = filterFinishedProducts(activeFinishedProducts, orderSearch, orderProductFilters);
   const availableFor = (productId: string) =>
     stocks
       .filter(
@@ -118,10 +242,10 @@ export default function SalesPage() {
   const discountNumber = Number(discount);
   const discountInvalid = !Number.isFinite(discountNumber) || discountNumber < 0 || discountNumber > subtotal || (cartLines.length > 0 && subtotal - discountNumber <= 0);
   const total = Math.max(subtotal - (Number.isFinite(discountNumber) ? discountNumber : 0), 0);
-  const completedSales = sales.filter((sale) => sale.status === "Selesai" || sale.status === "Diretur");
-  const activeOrders = sales.filter((sale) => !["Selesai", "Diretur"].includes(sale.status));
+  const completedSales = sales.filter((sale) => ["Selesai", "Retur Sebagian", "Diretur"].includes(sale.status));
+  const activeOrders = sales.filter((sale) => !["Selesai", "Retur Sebagian", "Diretur"].includes(sale.status));
   const todayKey = localDateKey();
-  const todaySales = completedSales.filter((sale) => localDateKey(sale.createdAt) === todayKey);
+  const todaySales = completedSales.filter((sale) => postedSaleDateKey(sale) === todayKey);
   const todayTotal = todaySales.reduce((sum, sale) => sum + sale.total, 0);
   const averageTicket = todaySales.length ? todayTotal / todaySales.length : 0;
   const customerExposure = (selectedId?: string) => {
@@ -201,9 +325,16 @@ export default function SalesPage() {
         cell: ({ getValue }) => <span className="tabular font-semibold">{formatCurrency(Number(getValue()))}</span>,
       },
       { header: "Status", accessorKey: "status", cell: ({ getValue }) => <StatusBadge status={String(getValue())} /> },
+      { id: "action", header: "Tindakan", cell: ({ row }) => canManageSales && ["Selesai", "Retur Sebagian"].includes(row.original.status) ? <Button size="small" appearance="subtle" onClick={() => {
+        setReturnSaleId(row.original.id);
+        setReturnReason("");
+        setReturnQuantities(Object.fromEntries(row.original.items.map((item) => [item.productId, "0"])));
+        setReturnConditions(Object.fromEntries(row.original.items.map((item) => [item.productId, "Layak Jual"])));
+      }}>Catat retur</Button> : null },
     ],
-    [customers, products],
+    [canManageSales, customers, products],
   );
+  const activeOrderColumns = useMemo(() => saleColumns.filter((column) => column.id !== "action"), [saleColumns]);
 
   const shiftColumns = useMemo<ColumnDef<SalesShift>[]>(
     () => [
@@ -234,6 +365,8 @@ export default function SalesPage() {
   );
 
   const selectedShift = salesShifts.find((shift) => shift.id === closeShiftId);
+  const activeUserShift = salesShifts.find((shift) => shift.salesAdminId === user?.id && shift.status === "Buka");
+  const selectedReturnSale = sales.find((sale) => sale.id === returnSaleId);
 
   return (
     <div className="space-y-5">
@@ -245,10 +378,10 @@ export default function SalesPage() {
 
       <MetricStrip
         items={[
-          { label: "Penjualan hari ini", value: formatCurrency(todayTotal), detail: `${todaySales.length} transaksi selesai`, trend: todaySales.length ? "up" : "neutral", icon: <Money24Regular />, onClick: () => setTab("history") },
-          { label: "Rata-rata transaksi", value: formatCurrency(averageTicket), detail: "Per transaksi selesai", trend: "neutral", icon: <Receipt24Regular />, onClick: () => setTab("history") },
-          { label: "Pesanan aktif", value: String(activeOrders.length), detail: `${formatCurrency(activeOrders.reduce((sum, sale) => sum + sale.total, 0))} nilai pesanan`, trend: "neutral", icon: <Clock24Regular />, onClick: () => setTab("orders") },
-          { label: "Agen B2B", value: String(customers.length), detail: `${customers.filter((item) => item.category === "Agen 1").length} Agen 1 · ${customers.filter((item) => item.category === "Agen 2").length} Agen 2`, trend: "neutral", icon: <People24Regular />, onClick: () => router.push("/master-data") },
+          { label: "Penjualan hari ini", value: formatCurrency(todayTotal), detail: `${todaySales.length} transaksi selesai`, trend: todaySales.length ? "up" : "neutral", icon: <Money24Regular />, onClick: () => setTab("history"), targetId: "sales-history" },
+          { label: "Rata-rata transaksi", value: formatCurrency(averageTicket), detail: "Per transaksi selesai", trend: "neutral", icon: <Receipt24Regular />, onClick: () => setTab("history"), targetId: "sales-history" },
+          { label: "Pesanan aktif", value: String(activeOrders.length), detail: `${formatCurrency(activeOrders.reduce((sum, sale) => sum + sale.total, 0))} nilai pesanan`, trend: "neutral", icon: <Clock24Regular />, onClick: () => setTab("orders"), targetId: "sales-orders" },
+          { label: "Agen B2B", value: String(customers.length), detail: `${customers.filter((item) => item.category === "Agen 1").length} Agen 1 · ${customers.filter((item) => item.category === "Agen 2").length} Agen 2`, trend: "neutral", icon: <People24Regular />, onClick: () => router.push("/master-data#master-agents") },
         ]}
       />
 
@@ -256,18 +389,22 @@ export default function SalesPage() {
         {canManageSales ? <Tab value="pos">POS pusat</Tab> : null}
         <Tab value="orders">Pesanan agen</Tab>
         <Tab value="history">Riwayat penjualan</Tab>
+        <Tab value="returns">Retur</Tab>
         <Tab value="shift">Shift POS</Tab>
       </TabList>
 
       {tab === "pos" && canManageSales ? (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
+        <div id="sales-pos" className="scroll-mt-24 grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
           <SectionPanel title="Pilih produk" description="Stok siap jual di Gudang Produk Jadi">
-            <Input
-              value={search}
-              onChange={(_, data) => setSearch(data.value)}
-              contentBefore={<Search20Regular />}
-              placeholder="Cari kode atau nama produk..."
-              className="mb-4 w-full max-w-sm"
+            <ProductSearchFilters
+              search={search}
+              onSearchChange={setSearch}
+              filters={productFilters}
+              onFiltersChange={setProductFilters}
+              products={activeFinishedProducts}
+              categories={finishedProductCategories}
+              types={finishedProductTypes}
+              variants={finishedProductVariants}
             />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {finishedProducts.map((product) => {
@@ -291,6 +428,12 @@ export default function SalesPage() {
                   </button>
                 );
               })}
+              {!finishedProducts.length ? (
+                <div className="col-span-full rounded-xl border border-dashed border-[var(--app-border)] px-5 py-10 text-center">
+                  <p className="text-sm font-semibold">Produk tidak ditemukan</p>
+                  <p className="mt-1 text-xs text-[var(--app-text-muted)]">Ubah kata pencarian atau pilihan kategori, tipe, dan varian.</p>
+                </div>
+              ) : null}
             </div>
           </SectionPanel>
 
@@ -393,15 +536,36 @@ export default function SalesPage() {
       ) : null}
 
       {tab === "orders" ? (
-        <SectionPanel title="Pesanan agen aktif" description="Pesanan selesai setelah diambil atau dikonfirmasi diterima agen." action={canManageSales ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setOrderOpen(true)}>Input pesanan</Button> : null} noPadding>
-          <DataTable data={activeOrders} columns={saleColumns} searchPlaceholder="Cari nomor, agen, atau kategori..." emptyTitle="Tidak ada pesanan aktif" emptyDescription="Semua pesanan agen telah selesai dipenuhi." />
+        <SectionPanel id="sales-orders" title="Pesanan agen aktif" description="Pesanan selesai setelah diambil atau dikonfirmasi diterima agen. Tindakan pemenuhan dilakukan Gudang dari menu Inventori → Pemenuhan agen." action={canManageSales ? <Button appearance="primary" size="small" icon={<Add20Regular />} onClick={() => setOrderOpen(true)}>Input pesanan</Button> : null} noPadding>
+          <DataTable data={activeOrders} columns={activeOrderColumns} searchPlaceholder="Cari nomor, agen, atau kategori..." emptyTitle="Tidak ada pesanan aktif" emptyDescription="Semua pesanan agen telah selesai dipenuhi." />
         </SectionPanel>
       ) : null}
-      {tab === "history" ? <SectionPanel noPadding><DataTable data={completedSales} columns={saleColumns} searchPlaceholder="Cari transaksi, agen, atau metode bayar..." /></SectionPanel> : null}
-      {tab === "shift" ? <SectionPanel noPadding><DataTable data={salesShifts} columns={shiftColumns} searchPlaceholder="Cari admin penjualan..." /></SectionPanel> : null}
+      {tab === "history" ? <SectionPanel id="sales-history" title="Riwayat penjualan" description="Transaksi selesai; tombol Catat retur hanya tersedia di daftar ini." noPadding><DataTable data={completedSales} columns={saleColumns} searchPlaceholder="Cari transaksi, agen, atau metode bayar..." /></SectionPanel> : null}
+      {tab === "returns" ? <SectionPanel id="sales-returns" title="Retur penjualan" description="Retur barang terhubung ke transaksi asal; refund diproses oleh Finance." noPadding><DataTable data={salesReturns} columns={[
+        { header: "Retur", accessorKey: "number" },
+        { header: "Transaksi", accessorKey: "saleNumber" },
+        { header: "Alasan", accessorKey: "reason" },
+        { header: "Nilai", accessorKey: "returnValue", cell: ({ getValue }: { getValue: () => unknown }) => formatCurrency(Number(getValue())) },
+        { header: "Refund", accessorKey: "refundAmount", cell: ({ getValue }: { getValue: () => unknown }) => formatCurrency(Number(getValue())) },
+        { header: "Status", accessorKey: "status", cell: ({ getValue }: { getValue: () => unknown }) => <StatusBadge status={String(getValue())} /> },
+      ]} searchPlaceholder="Cari retur atau transaksi asal..." emptyTitle="Belum ada retur" emptyDescription="Retur yang dicatat akan muncul di sini." /></SectionPanel> : null}
+      {tab === "shift" ? (
+        <SectionPanel
+          id="sales-shift"
+          title="Shift POS"
+          description="Setiap transaksi POS wajib terkait tepat satu shift aktif. Kas awal diinput Admin Penjualan saat menekan Buka shift, berdasarkan uang tunai fisik yang dihitung di laci kasir—bukan dari saldo bank atau penjualan."
+          action={canCloseShift && !activeUserShift ? <Button appearance="primary" onClick={() => { setOpeningCash("0"); setOpenShiftDialog(true); }}>Buka shift</Button> : null}
+          noPadding
+        >
+          <div className="border-b border-[var(--app-border)] bg-[var(--app-surface-2)]/45 px-4 py-3 text-xs leading-5 text-[var(--app-text-muted)] md:px-5">
+            Sumber kas awal: petugas menghitung uang pecahan yang benar-benar diserahkan sebagai modal kembalian, lalu memasukkan jumlahnya pada formulir Buka shift. Kas seharusnya akan bertambah hanya dari transaksi tunai pada shift tersebut.
+          </div>
+          <DataTable data={salesShifts} columns={shiftColumns} searchPlaceholder="Cari admin penjualan..." />
+        </SectionPanel>
+      ) : null}
 
       <Dialog open={canManageSales && orderOpen} onOpenChange={(_, data) => setOrderOpen(data.open)}>
-        <DialogSurface className="!max-w-5xl">
+        <DialogSurface className="erp-dialog--xwide">
           <DialogBody>
             <DialogTitle>Input pesanan agen</DialogTitle>
             <DialogContent className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
@@ -412,18 +576,22 @@ export default function SalesPage() {
                 <Field label="Dibutuhkan"><Input type="datetime-local" value={neededAt} onChange={(_, data) => setNeededAt(data.value)} /></Field>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-                <section className="rounded-xl border border-[var(--app-border)] p-3">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+                <section className="min-w-0 rounded-xl border border-[var(--app-border)] p-3">
                   <div className="mb-3">
                     <h3 className="text-sm font-semibold">Pilih produk</h3>
                     <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Boleh melebihi stok tersedia; kekurangannya akan menunggu produksi.</p>
                   </div>
-                  <Input
-                    value={orderSearch}
-                    onChange={(_, data) => setOrderSearch(data.value)}
-                    contentBefore={<Search20Regular />}
-                    placeholder="Cari kode atau nama produk..."
-                    className="mb-3 w-full"
+                  <ProductSearchFilters
+                    search={orderSearch}
+                    onSearchChange={setOrderSearch}
+                    filters={orderProductFilters}
+                    onFiltersChange={setOrderProductFilters}
+                    products={activeFinishedProducts}
+                    categories={finishedProductCategories}
+                    types={finishedProductTypes}
+                    variants={finishedProductVariants}
+                    compact
                   />
                   <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
                     {orderProducts.map((product) => {
@@ -450,10 +618,16 @@ export default function SalesPage() {
                         </button>
                       );
                     })}
+                    {!orderProducts.length ? (
+                      <div className="col-span-full rounded-lg border border-dashed border-[var(--app-border)] px-4 py-8 text-center">
+                        <p className="text-sm font-semibold">Produk tidak ditemukan</p>
+                        <p className="mt-1 text-xs text-[var(--app-text-muted)]">Ubah pencarian atau filter produk.</p>
+                      </div>
+                    ) : null}
                   </div>
                 </section>
 
-                <section className="overflow-hidden rounded-xl border border-[var(--app-border)]">
+                <section className="min-w-0 overflow-hidden rounded-xl border border-[var(--app-border)]">
                   <div className="border-b border-[var(--app-border)] px-3 py-2.5">
                     <h3 className="text-sm font-semibold">Keranjang pesanan</h3>
                     <p className="mt-0.5 text-xs text-[var(--app-text-muted)]">{orderCartLines.length} jenis produk · satu nomor pesanan</p>
@@ -478,7 +652,7 @@ export default function SalesPage() {
                           <p className={`mt-1 text-[11px] ${shortage > 0 ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>
                             {shortage > 0 ? `Perlu produksi ${formatNumber(shortage)} ${line.product.stockUnit}` : `Stok cukup · tersedia ${formatNumber(available)} ${line.product.stockUnit}`}
                           </p>
-                          <div className="mt-2 flex items-center gap-1">
+                          <div className="mt-2 flex min-w-0 items-center gap-1">
                             <Button size="small" appearance="subtle" icon={<Subtract20Regular />} aria-label={`Kurangi ${line.product.name}`} onClick={() => setOrderCart((current) => ({ ...current, [line.product.id]: Math.max(line.quantity - 1, 0) }))} />
                             <Input
                               type="number"
@@ -487,7 +661,7 @@ export default function SalesPage() {
                               value={String(line.quantity)}
                               aria-label={`Jumlah pesanan ${line.product.name}`}
                               contentAfter={line.product.stockUnit}
-                              className="!w-32"
+                              className="min-w-0 flex-1 !w-auto"
                               onFocus={(event) => event.currentTarget.select()}
                               onChange={(_, data) => {
                                 const parsed = Number(data.value);
@@ -586,6 +760,50 @@ export default function SalesPage() {
             </DialogActions>
           </DialogBody>
         </DialogSurface>
+      </Dialog>
+
+      <Dialog open={canCloseShift && openShiftDialog} onOpenChange={(_, data) => setOpenShiftDialog(data.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Buka shift POS</DialogTitle>
+            <DialogContent className="space-y-4">
+              <p className="text-sm text-[var(--app-text-muted)]">Kas awal menjadi saldo kas yang diharapkan sebelum transaksi tunai pertama.</p>
+              <Field label="Kas awal">
+                <Input type="number" min="0" value={openingCash} contentBefore="Rp" onChange={(_, data) => setOpeningCash(data.value)} />
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setOpenShiftDialog(false)}>Batal</Button>
+              <Button
+                appearance="primary"
+                disabled={!Number.isFinite(Number(openingCash)) || Number(openingCash) < 0}
+                onClick={() => {
+                  try {
+                    const shift = openSalesShift(Number(openingCash));
+                    setOpenShiftDialog(false);
+                    toast("Shift POS dibuka", `${user?.name ?? "Pengguna"} · ${formatCurrency(shift.openingCash)}`);
+                  } catch (error) {
+                    toast("Shift tidak dapat dibuka", error instanceof Error ? error.message : "Periksa kembali kas awal.");
+                  }
+                }}
+              >
+                Buka shift
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Dialog open={canManageSales && Boolean(selectedReturnSale)} onOpenChange={(_, data) => !data.open && setReturnSaleId(null)}>
+        <DialogSurface className="erp-dialog--wide"><DialogBody><DialogTitle>Catat retur penjualan</DialogTitle><DialogContent className="max-h-[70vh] space-y-4 overflow-y-auto">
+          <div className="rounded-lg bg-[var(--app-surface-2)] p-3 text-sm"><p className="font-mono font-semibold">{selectedReturnSale?.number}</p><p className="mt-1 text-xs text-[var(--app-text-muted)]">Barang layak jual kembali ke Gudang Produk Jadi; barang rusak masuk Area Retur Rusak.</p></div>
+          {selectedReturnSale?.items.map((item) => <div key={item.productId} className="grid gap-2 rounded-lg border border-[var(--app-border)] p-3 sm:grid-cols-[minmax(0,1fr)_140px_150px] sm:items-end">
+            <div><p className="text-sm font-semibold">{products.find((product) => product.id === item.productId)?.name ?? item.productId}</p><p className="mt-1 text-xs text-[var(--app-text-muted)]">Terjual {formatNumber(item.quantity)}</p></div>
+            <Field label="Jumlah"><Input type="number" min="0" max={item.quantity} value={returnQuantities[item.productId] ?? "0"} onChange={(_, data) => setReturnQuantities((current) => ({ ...current, [item.productId]: data.value }))} /></Field>
+            <Field label="Kondisi"><Select value={returnConditions[item.productId] ?? "Layak Jual"} onChange={(event) => setReturnConditions((current) => ({ ...current, [item.productId]: event.target.value as SalesReturnCondition }))}><option>Layak Jual</option><option>Rusak</option></Select></Field>
+          </div>)}
+          <Field label="Alasan retur" required><Input value={returnReason} onChange={(_, data) => setReturnReason(data.value)} placeholder="Jelaskan alasan dan hasil pemeriksaan barang" /></Field>
+        </DialogContent><DialogActions><Button appearance="secondary" onClick={() => setReturnSaleId(null)}>Batal</Button><Button appearance="primary" disabled={!selectedReturnSale || !returnReason.trim()} onClick={() => { if (!selectedReturnSale) return; try { const salesReturn = createSalesReturn(selectedReturnSale.id, selectedReturnSale.items.map((item) => ({ productId: item.productId, quantity: Number(returnQuantities[item.productId] ?? 0), condition: returnConditions[item.productId] ?? "Layak Jual" as const })).filter((item) => item.quantity > 0), returnReason); toast("Retur dicatat", `${salesReturn.number} · refund ${formatCurrency(salesReturn.refundAmount)}`); setReturnSaleId(null); setTab("returns"); } catch (error) { toast("Retur belum dapat dicatat", error instanceof Error ? error.message : "Periksa jumlah retur."); } }}>Simpan retur</Button></DialogActions></DialogBody></DialogSurface>
       </Dialog>
     </div>
   );

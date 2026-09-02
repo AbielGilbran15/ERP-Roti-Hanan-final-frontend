@@ -29,7 +29,7 @@ const demoAccounts = [
   { label: "Admin Penjualan/Sales", identifier: "sales.pusat", name: "Rina Marlina" },
   { label: "Gudang", identifier: "gudang.pusat", name: "Yudi Hermawan" },
   { label: "Produksi", identifier: "produksi.pusat", name: "Aulia Rahman" },
-  { label: "QC", identifier: "qc.pusat", name: "Fikri Ramadhan" },
+  { label: "Produksi 2", identifier: "produksi.fikri", name: "Fikri Ramadhan" },
   { label: "Purchasing", identifier: "purchasing.pusat", name: "Ratna Wulandari" },
   { label: "HR/Finance", identifier: "siti.finance", name: "Siti Nurhayati" },
 ];
@@ -88,7 +88,7 @@ export default function LoginPage() {
               Kendalikan seluruh operasional pusat dalam satu tempat.
             </h1>
             <p className="mt-5 max-w-md text-base leading-7 text-emerald-50/70">
-              Penjualan, stok, produksi, QC, pembelian, keuangan, dan tenaga kerja saling terhubung.
+              Penjualan, dua gudang, produksi, pembelian, keuangan, dan tenaga kerja saling terhubung.
             </p>
           </div>
         </div>

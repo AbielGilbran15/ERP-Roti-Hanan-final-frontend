@@ -1,18 +1,30 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { localDateKey } from "@/lib/date";
 import { formatCompactCurrency, formatCurrency } from "@/lib/format";
+import type { CashTransaction } from "@/lib/types";
 
-const cashFlow = [
-  { week: "Minggu 1", masuk: 118400000, keluar: 84200000 },
-  { week: "Minggu 2", masuk: 126800000, keluar: 91300000 },
-  { week: "Minggu 3", masuk: 139600000, keluar: 97800000 },
-  { week: "Minggu 4", masuk: 154200000, keluar: 108500000 },
-];
-
-export function FinanceChart() {
+export function FinanceChart({ transactions }: { transactions: CashTransaction[] }) {
+  const monthKey = localDateKey().slice(0, 7);
+  const cashFlow = transactions
+    .filter((transaction) => transaction.date.startsWith(monthKey))
+    .reduce(
+      (weeks, transaction) => {
+        const day = Number(transaction.date.slice(8, 10));
+        const index = Math.min(Math.floor((day - 1) / 7), 3);
+        weeks[index][transaction.direction === "Masuk" ? "masuk" : "keluar"] += transaction.amount;
+        return weeks;
+      },
+      [
+        { week: "1–7", masuk: 0, keluar: 0 },
+        { week: "8–14", masuk: 0, keluar: 0 },
+        { week: "15–21", masuk: 0, keluar: 0 },
+        { week: "22–akhir", masuk: 0, keluar: 0 },
+      ],
+    );
   return (
-    <div className="h-[280px] w-full" aria-label="Grafik arus kas empat minggu">
+    <div className="h-[280px] w-full" aria-label="Grafik arus kas bulan berjalan">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={cashFlow} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="var(--app-border)" vertical={false} />
